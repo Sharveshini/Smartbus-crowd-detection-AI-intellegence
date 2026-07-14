@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartBus · Intelligent Fleet Management</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --primary-dark: #1d4ed8;
+            --secondary: #f59e0b;
+            --secondary-light: #fbbf24;
+            --accent: #10b981;
+            --accent-light: #34d399;
+            --danger: #ef4444;
+            --danger-light: #f87171;
+            --purple: #8b5cf6;
+            --pink: #ec4899;
+            --bg: #f0f5ff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8faff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --border-light: #f1f5f9;
+            --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
+            --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --sidebar-width: 260px;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 10px; }
+
+        /* ─── SIDEBAR ─── */
+        .sidebar {
+            position: fixed; left: 0; top: 0; width: var(--sidebar-width); height: 100vh;
+            background: linear-gradient(180deg, #1e3a5f 0%, #1a2a4a 100%);
+            z-index: 1000; display: flex; flex-direction: column;
+            transition: transform 0.3s ease; box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+        }
+        .sidebar-logo {
+            padding: 22px 20px 18px; display: flex; align-items: center; gap: 12px;
+            font-weight: 800; font-size: 1.3rem; color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+        }
+        .sidebar-logo i { color: var(--secondary); font-size: 1.7rem; }
+        .sidebar-logo span { color: var(--secondary); }
+        .sidebar-logo .version { font-size: 0.5rem; color: rgba(255,255,255,0.3); font-weight: 400; margin-left: auto; }
+        .sidebar-user {
+            padding: 16px 20px; display: flex; align-items: center; gap: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .sidebar-user .avatar {
+            width: 42px; height: 42px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--secondary), var(--secondary-light));
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 1rem; color: #1e3a5f; flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(245,158,11,0.3);
+        }
+        .sidebar-user .user-info { flex: 1; min-width: 0; }
+        .sidebar-user .user-info .name { font-size: 0.85rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-user .user-info .role { font-size: 0.6rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.5px; }
+        .sidebar-nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+        .sidebar-nav .nav-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1.2px; color: rgba(255,255,255,0.3); padding: 16px 20px 6px; font-weight: 700; }
+        .sidebar-nav a {
+            display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+            color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.82rem; font-weight: 500;
+            transition: var(--transition); border-left: 3px solid transparent; position: relative;
+        }
+        .sidebar-nav a:hover { background: rgba(255,255,255,0.06); color: #fff; }
+        .sidebar-nav a.active { color: #fff; border-left-color: var(--secondary); background: rgba(245,158,11,0.1); }
+        .sidebar-nav a i { width: 20px; text-align: center; font-size: 1rem; }
+        .sidebar-nav a .badge {
+            margin-left: auto; background: var(--danger); color: #fff; padding: 1px 8px;
+            border-radius: 50px; font-size: 0.55rem; font-weight: 700; min-width: 20px; text-align: center;
+        }
+        .sidebar-nav a .ai-badge {
+            margin-left: auto; background: linear-gradient(135deg, var(--purple), var(--pink));
+            color: #fff; padding: 1px 8px; border-radius: 50px; font-size: 0.5rem; font-weight: 700;
+        }
+        .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.06); }
+        .sidebar-footer button {
+            width: 100%; padding: 9px 12px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.7); cursor: pointer; font-size: 0.78rem;
+            display: flex; align-items: center; gap: 8px; justify-content: center; transition: var(--transition);
+        }
+        .sidebar-footer button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+        /* ─── MAIN ─── */
+        .main-area { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; }
+        .top-bar {
+            position: sticky; top: 0; z-index: 999;
+            background: rgba(255,255,255,0.92); backdrop-filter: blur(16px);
+            padding: 12px 28px; display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .top-bar .page-title { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; color: var(--text); }
+        .top-bar .page-title i { color: var(--primary); }
+        .top-bar .top-actions { display: flex; align-items: center; gap: 10px; }
+        .top-bar .top-actions .status-badge {
+            display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--text-secondary);
+            padding: 4px 12px; border-radius: 50px; background: var(--bg); border: 1px solid var(--border);
+        }
+        .top-bar .top-actions .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+        .top-bar .top-actions .status-badge .dot.online { background: var(--accent); }
+        .top-bar .top-actions .status-badge .dot.offline { background: var(--danger); }
+        .top-bar .top-actions .btn-icon {
+            width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+            background: #fff; color: var(--text-secondary); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: var(--transition);
+        }
+        .top-bar .top-actions .btn-icon:hover { background: var(--bg); color: var(--text); border-color: var(--primary-light); }
+        .top-bar .top-actions .btn-icon .notif-dot {
+            position: absolute; top: 6px; right: 6px; width: 7px; height: 7px;
+            background: var(--danger); border-radius: 50%; display: none; border: 1.5px solid #fff;
+        }
+        .top-bar .top-actions .btn-icon .notif-dot.show { display: block; }
+        .top-bar .top-actions .btn-icon { position: relative; }
+        .content-area { padding: 24px 28px; }
+
+        /* ─── CARDS ─── */
+        .card {
+            background: var(--bg-card); border-radius: var(--radius);
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+        .card:hover { box-shadow: var(--shadow-md); }
+        .card-header {
+            padding: 16px 20px; border-bottom: 1px solid var(--border-light);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .card-header h3 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+        .card-body { padding: 20px; }
+
+        /* ─── STATS ─── */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card {
+            padding: 20px 22px; display: flex; align-items: center; gap: 16px;
+            background: #fff; border-radius: var(--radius); border: 1px solid var(--border);
+            box-shadow: var(--shadow); transition: var(--transition); position: relative; overflow: hidden;
+        }
+        .stat-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        }
+        .stat-card:nth-child(1)::before { background: linear-gradient(90deg, var(--primary), var(--primary-light)); }
+        .stat-card:nth-child(2)::before { background: linear-gradient(90deg, var(--secondary), var(--secondary-light)); }
+        .stat-card:nth-child(3)::before { background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+        .stat-card:nth-child(4)::before { background: linear-gradient(90deg, var(--danger), var(--danger-light)); }
+        .stat-card:nth-child(5)::before { background: linear-gradient(90deg, var(--purple), var(--pink)); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .stat-icon {
+            width: 48px; height: 48px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;
+        }
+        .stat-icon.blue { background: linear-gradient(135deg, #dbeafe, #eff6ff); color: var(--primary); }
+        .stat-icon.gold { background: linear-gradient(135deg, #fef3c7, #fffbeb); color: var(--secondary); }
+        .stat-icon.green { background: linear-gradient(135deg, #d1fae5, #ecfdf5); color: var(--accent); }
+        .stat-icon.red { background: linear-gradient(135deg, #fee2e2, #fef2f2); color: var(--danger); }
+        .stat-icon.purple { background: linear-gradient(135deg, #ede9fe, #f5f3ff); color: var(--purple); }
+        .stat-info .num { font-size: 1.6rem; font-weight: 800; line-height: 1.2; color: var(--text); }
+        .stat-info .label { font-size: 0.7rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+        .stat-info .trend { font-size: 0.65rem; font-weight: 600; margin-top: 2px; }
+        .stat-info .trend.up { color: var(--accent); }
+        .stat-info .trend.down { color: var(--danger); }
+
+        /* ─── MAIN GRID ─── */
+        .main-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; margin-bottom: 24px; }
+        @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr; } }
+
+        /* ─── MAP ─── */
+        .map-wrapper { overflow: hidden; border-radius: var(--radius); border: 1px solid var(--border); position: relative; box-shadow: var(--shadow); }
+        .map-header {
+            padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;
+            background: #fff; border-bottom: 1px solid var(--border-light);
+        }
+        .map-header h3 { font-size: 0.82rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .map-header h3 i { color: var(--primary); }
+        .map-header .live-badge {
+            display: flex; align-items: center; gap: 6px; font-size: 0.6rem; font-weight: 700;
+            color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .map-header .live-badge .pulse { width: 6px; height: 6px; background: var(--danger); border-radius: 50%; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        #map { height: 440px; width: 100%; background: #e8f0fe; }
+        .map-legend {
+            position: absolute; bottom: 12px; left: 12px; z-index: 999;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(8px);
+            padding: 8px 14px; border-radius: 10px; font-size: 0.65rem;
+            display: flex; gap: 14px; border: 1px solid var(--border); box-shadow: var(--shadow-md);
+        }
+        .map-legend span { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+        .map-legend .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        /* ─── SIDE PANEL ─── */
+        .side-panel { display: flex; flex-direction: column; gap: 16px; }
+
+        /* ─── PLANNER ─── */
+        .planner-card .card-body { padding: 18px 20px; }
+        .planner-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+        .planner-row select, .planner-row input {
+            flex: 1; min-width: 80px; padding: 10px 14px; border-radius: var(--radius-sm);
+            border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
+            font-size: 0.8rem; outline: none; transition: var(--transition); font-family: inherit;
+        }
+        .planner-row select:focus, .planner-row input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .planner-row select option { background: #fff; color: var(--text); }
+        .planner-row button {
+            padding: 10px 20px; border-radius: var(--radius-sm); border: none;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: #fff; font-weight: 600; font-size: 0.8rem; cursor: pointer;
+            transition: var(--transition); display: flex; align-items: center; gap: 8px; white-space: nowrap;
+        }
+        .planner-row button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+        .planner-row button.outline {
+            background: transparent; border: 1.5px solid var(--border); color: var(--text-secondary);
+        }
+        .planner-row button.outline:hover { background: var(--bg); border-color: var(--primary-light); color: var(--primary); }
+        .planner-result {
+            margin-top: 12px; padding: 14px 16px; border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #f0f5ff, #f8faff);
+            border: 1px solid #dbeafe; font-size: 0.8rem; display: none;
+        }
+        .planner-result.active { display: block; animation: fadeUp 0.4s ease; }
+        .planner-result .leg { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #e2e8f0; }
+        .planner-result .leg:last-child { border-bottom: none; }
+        .planner-result .leg .route-badge {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: #fff; padding: 2px 10px; border-radius: 50px; font-size: 0.55rem; font-weight: 700; white-space: nowrap;
+        }
+        .planner-result .leg .stop-name { color: var(--text-secondary); font-size: 0.72rem; }
+        .planner-result .leg .arrow { color: var(--text-muted); }
+        .planner-result .summary { margin-top: 8px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.72rem; }
+        .planner-result .summary span { color: var(--text-secondary); }
+        .planner-result .summary strong { color: var(--text); }
+        .planner-result .alt-route {
+            margin-top: 10px; padding: 10px 14px; border-radius: 8px;
+            background: linear-gradient(135deg, #fef3c7, #fffbeb);
+            border: 1px solid #fde68a; font-size: 0.75rem;
+        }
+        .planner-result .alt-route i { color: var(--secondary); }
+
+        /* ─── BUS LIST ─── */
+        .bus-list-card .card-body { padding: 14px 18px; flex: 1; min-height: 200px; max-height: 360px; display: flex; flex-direction: column; }
+        .bus-list-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+        .bus-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            border-radius: var(--radius-sm); background: var(--bg); transition: var(--transition);
+            cursor: pointer; border-left: 3px solid var(--border); border: 1px solid transparent;
+        }
+        .bus-item:hover { background: #fff; border-color: var(--border); transform: translateX(3px); box-shadow: var(--shadow); }
+        .bus-item.high { border-left-color: var(--danger); }
+        .bus-item.medium { border-left-color: var(--secondary); }
+        .bus-item.low { border-left-color: var(--accent); }
+        .bus-item .num { font-weight: 700; font-size: 0.78rem; min-width: 60px; color: var(--text); }
+        .bus-item .route { font-size: 0.62rem; color: var(--text-secondary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bus-item .status-badge {
+            font-size: 0.48rem; font-weight: 700; text-transform: uppercase;
+            padding: 2px 10px; border-radius: 50px;
+        }
+        .bus-item .status-badge.high { background: #fee2e2; color: #dc2626; }
+        .bus-item .status-badge.medium { background: #fef3c7; color: #d97706; }
+        .bus-item .status-badge.low { background: #d1fae5; color: #059669; }
+        .bus-item .pax { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); min-width: 28px; text-align: right; }
+        .bus-item .eta { font-size: 0.6rem; color: var(--text-muted); min-width: 30px; text-align: right; }
+        .no-buses { text-align: center; padding: 30px 0; color: var(--text-muted); font-size: 0.8rem; }
+        .no-buses i { font-size: 1.5rem; opacity: 0.3; display: block; margin-bottom: 6px; }
+
+        /* ─── CHARTS ─── */
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+        .chart-card .card-body { padding: 18px 20px; }
+        .chart-card canvas { max-height: 170px; max-width: 100%; }
+
+        /* ─── ACTIVITY ─── */
+        .activity-card .card-body { padding: 16px 20px; }
+        .activity-list { display: flex; flex-direction: column; gap: 8px; }
+        .activity-item {
+            display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+            border-radius: var(--radius-sm); background: var(--bg); font-size: 0.78rem;
+            border: 1px solid transparent; transition: var(--transition);
+        }
+        .activity-item:hover { border-color: var(--border); }
+        .activity-item .act-icon {
+            width: 30px; height: 30px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0;
+        }
+        .activity-item .act-icon.crowd { background: #fee2e2; color: #dc2626; }
+        .activity-item .act-icon.route { background: #dbeafe; color: #2563eb; }
+        .activity-item .act-icon.system { background: #ede9fe; color: #7c3aed; }
+        .activity-item .act-icon.success { background: #d1fae5; color: #059669; }
+        .activity-item .act-text { flex: 1; }
+        .activity-item .act-text .act-title { color: var(--text); font-weight: 500; }
+        .activity-item .act-text .act-desc { color: var(--text-muted); font-size: 0.68rem; }
+        .activity-item .act-time { color: var(--text-muted); font-size: 0.62rem; white-space: nowrap; }
+
+        /* ─── NOTIFICATION PANEL ─── */
+        .notif-panel {
+            position: fixed; top: 0; right: -400px; width: 380px; height: 100vh;
+            background: #fff; border-left: 1px solid var(--border); z-index: 2000;
+            transition: right 0.3s ease; display: flex; flex-direction: column;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.08);
+        }
+        .notif-panel.open { right: 0; }
+        .notif-panel-header { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .notif-panel-header h3 { font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+        .notif-panel-header h3 i { color: var(--primary); }
+        .notif-panel-header button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px; }
+        .notif-panel-body { flex: 1; overflow-y: auto; padding: 12px 16px; }
+        .notif-item {
+            padding: 14px 16px; border-radius: var(--radius-sm);
+            background: var(--bg); margin-bottom: 8px; border-left: 3px solid var(--primary);
+            cursor: pointer; transition: var(--transition);
+        }
+        .notif-item:hover { background: #fff; box-shadow: var(--shadow); }
+        .notif-item .notif-title { font-weight: 600; font-size: 0.85rem; color: var(--text); }
+        .notif-item .notif-body { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+        .notif-item .notif-time { font-size: 0.62rem; color: var(--text-muted); margin-top: 4px; }
+        .notif-item.unread { border-left-color: var(--secondary); background: #fffbeb; }
+        .notif-item.unread .notif-title::after { content: ' •'; color: var(--secondary); }
+        .notif-empty { text-align: center; padding: 40px 0; color: var(--text-muted); }
+        .notif-empty i { font-size: 2rem; opacity: 0.3; display: block; margin-bottom: 8px; }
+
+        /* ─── AUTH MODAL ─── */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15,23,42,0.5); backdrop-filter: blur(8px);
+            z-index: 3000; display: none; align-items: center; justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: #fff; border-radius: var(--radius); padding: 36px;
+            width: 400px; max-width: 92vw; box-shadow: var(--shadow-xl);
+            animation: fadeUp 0.3s ease;
+        }
+        .modal-box h2 { font-size: 1.4rem; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
+        .modal-box h2 i { color: var(--secondary); }
+        .modal-box .sub { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 22px; }
+        .modal-box .form-group { margin-bottom: 16px; }
+        .modal-box .form-group label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+        .modal-box .form-group input, .modal-box .form-group select {
+            width: 100%; padding: 11px 16px; border-radius: var(--radius-sm);
+            border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
+            font-size: 0.85rem; outline: none; transition: var(--transition); font-family: inherit;
+        }
+        .modal-box .form-group input:focus, .modal-box .form-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        .modal-box button.primary {
+            width: 100%; padding: 12px; border-radius: var(--radius-sm); border: none;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: #fff; font-weight: 700; font-size: 0.9rem; cursor: pointer;
+            transition: var(--transition); margin-top: 4px;
+        }
+        .modal-box button.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37,99,235,0.3); }
+        .modal-box .auth-switch { text-align: center; margin-top: 14px; font-size: 0.8rem; color: var(--text-muted); }
+        .modal-box .auth-switch a { color: var(--primary); cursor: pointer; text-decoration: none; font-weight: 600; }
+        .modal-box .auth-error { color: var(--danger); font-size: 0.75rem; margin-top: 8px; display: none; }
+        .modal-box .auth-error.show { display: block; }
+        .modal-box .demo-info {
+            margin-top: 14px; padding: 12px; border-radius: 10px;
+            background: linear-gradient(135deg, #f0f5ff, #f8faff);
+            border: 1px solid #dbeafe; font-size: 0.72rem; color: var(--text-secondary); line-height: 1.6;
+        }
+        .modal-box .demo-info strong { color: var(--text); }
+
+        /* ─── MAP MARKERS ─── */
+        .bus-marker { background: transparent !important; border: none !important; }
+        .bus-marker div {
+            display: flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.95);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            font-size: 15px; color: #fff; transition: 0.2s;
+        }
+        .bus-marker div i { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); }
+        .bus-marker.high div { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .bus-marker.medium div { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .bus-marker.low div { background: linear-gradient(135deg, #10b981, #059669); }
+        .stop-marker { background: transparent !important; border: none !important; }
+        .stop-marker div {
+            display: flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border: 2px solid rgba(255,255,255,0.8);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            font-size: 9px; color: #fff; font-weight: 700;
+        }
+        .user-marker { background: transparent !important; border: none !important; }
+        .user-marker div { font-size: 28px; color: #3b82f6; filter: drop-shadow(0 0 16px rgba(59,130,246,0.5)); }
+        .leaflet-popup-content { font-size: 0.8rem; line-height: 1.5; min-width: 150px; color: var(--text); }
+        .leaflet-popup-content-wrapper { border-radius: 12px !important; box-shadow: var(--shadow-lg) !important; }
+
+        /* ─── ANNOUNCEMENTS ─── */
+        .announcement-bar {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 18px; border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #fef3c7, #fffbeb);
+            border: 1px solid #fde68a; margin-bottom: 20px; font-size: 0.78rem;
+        }
+        .announcement-bar i { color: var(--secondary); font-size: 1rem; }
+        .announcement-bar .ann-text { flex: 1; color: var(--text); }
+        .announcement-bar .ann-text strong { color: #92400e; }
+
+        /* ─── AI INSIGHTS ─── */
+        .ai-insight {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 16px; border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #ede9fe, #f5f3ff);
+            border: 1px solid #ddd6fe; font-size: 0.75rem; margin-top: 10px;
+        }
+        .ai-insight i { color: var(--purple); font-size: 1.1rem; }
+        .ai-insight .ai-text { flex: 1; color: var(--text); }
+        .ai-insight .ai-text strong { color: #6d28d9; }
+
+        /* ─── SECTIONS ─── */
+        .section-content { display: none; }
+        .section-content.active { display: block; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+        .section-header h2 { font-size: 1.4rem; font-weight: 800; display: flex; align-items: center; gap: 10px; color: var(--text); }
+        .section-header h2 i { color: var(--primary); }
+
+        /* ─── ANIMATIONS ─── */
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeUp 0.5s ease forwards; opacity: 0; }
+        .delay-1 { animation-delay: 0.05s; }
+        .delay-2 { animation-delay: 0.1s; }
+        .delay-3 { animation-delay: 0.15s; }
+        .delay-4 { animation-delay: 0.2s; }
+        .delay-5 { animation-delay: 0.25s; }
+
+        /* ─── RESPONSIVE ─── */
+        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text); font-size: 1.3rem; cursor: pointer; padding: 4px; }
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-area { margin-left: 0; }
+            .mobile-menu-btn { display: flex !important; }
+        }
+        .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.4); z-index: 999; }
+        .sidebar-overlay.show { display: block; }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .stat-card { padding: 14px 16px; }
+            .stat-info .num { font-size: 1.2rem; }
+            #map { height: 320px; }
+            .planner-row select, .planner-row input, .planner-row button { flex: 1 1 100%; }
+            .top-bar .page-title { font-size: 0.95rem; }
+            .content-area { padding: 16px; }
+            .notif-panel { width: 100%; right: -100%; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .content-area { padding: 12px; }
+        }
+
+        /* ─── LOADING ─── */
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2.5px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── TAB BAR ─── */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 16px; background: var(--bg); border-radius: var(--radius-sm); padding: 4px; border: 1px solid var(--border); }
+        .tab-bar .tab { padding: 8px 18px; border-radius: 8px; border: none; background: transparent; color: var(--text-secondary); font-size: 0.78rem; font-weight: 500; cursor: pointer; transition: var(--transition); }
+        .tab-bar .tab.active { background: #fff; color: var(--primary); box-shadow: var(--shadow); }
+        .tab-bar .tab:hover:not(.active) { color: var(--text); }
+
+        /* ─── SOS ─── */
+        .sos-btn {
+            width: 100%; padding: 16px; border-radius: var(--radius-sm); border: none;
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: #fff; font-weight: 700; font-size: 1.05rem; cursor: pointer;
+            transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .sos-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(239,68,68,0.4); }
+
+        /* ─── FAVORITE ROUTES ─── */
+        .fav-item {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            border-radius: var(--radius-sm); background: var(--bg); margin-bottom: 6px;
+            border: 1px solid transparent; transition: var(--transition); cursor: pointer;
+        }
+        .fav-item:hover { border-color: var(--border); background: #fff; }
+        .fav-item i { color: var(--secondary); }
+        .fav-item .fav-text { flex: 1; font-size: 0.78rem; }
+        .fav-item .fav-text .fav-name { font-weight: 600; }
+        .fav-item .fav-text .fav-route { color: var(--text-muted); font-size: 0.68rem; }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR OVERLAY -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+            <i class="fas fa-bus"></i> Smart<span>Bus</span>
+            <span class="version">v3.0</span>
+        </div>
+        <div class="sidebar-user">
+            <div class="avatar" id="avatarLetter">G</div>
+            <div class="user-info">
+                <div class="name" id="userName">Guest User</div>
+                <div class="role" id="userRole">Not signed in</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-label">Main</div>
+            <a href="#" class="active" data-section="dashboard"><i class="fas fa-th-large"></i> Dashboard</a>
+            <a href="#" data-section="live-map"><i class="fas fa-map-marked-alt"></i> Live Map</a>
+            <a href="#" data-section="planner"><i class="fas fa-route"></i> Journey Planner <span class="ai-badge">AI</span></a>
+            <a href="#" data-section="routes"><i class="fas fa-directions"></i> Routes</a>
+            <div class="nav-label">Insights</div>
+            <a href="#" data-section="analytics"><i class="fas fa-chart-line"></i> Analytics</a>
+            <a href="#" data-section="favorites"><i class="fas fa-star"></i> Favorites</a>
+            <a href="#" data-section="history"><i class="fas fa-clock"></i> Trip History</a>
+            <div class="nav-label">Alerts</div>
+            <a href="#" data-section="notifications">
+                <i class="fas fa-bell"></i> Notifications
+                <span class="badge" id="notifBadge" style="display:none;">0</span>
+            </a>
+            <a href="#" data-section="sos"><i class="fas fa-exclamation-triangle"></i> SOS Emergency</a>
+        </nav>
+        <div class="sidebar-footer">
+            <button id="logoutBtn" style="display:none;"><i class="fas fa-sign-out-alt"></i> Sign Out</button>
+            <button id="loginBtn"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+        </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main-area">
+        <div class="top-bar">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="mobile-menu-btn" id="mobileMenuBtn"><i class="fas fa-bars"></i></button>
+                <div class="page-title">
+                    <i class="fas fa-th-large" id="pageIcon"></i>
+                    <span id="pageTitle">Dashboard</span>
+                </div>
+            </div>
+            <div class="top-actions">
+                <div class="status-badge">
+                    <span class="dot offline" id="statusDot"></span>
+                    <span id="statusText">Offline</span>
+                </div>
+                <button class="btn-icon" id="refreshBtn" title="Refresh"><i class="fas fa-sync-alt"></i></button>
+                <button class="btn-icon" id="notifPanelBtn" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="notif-dot" id="notifDot"></span>
+                </button>
+            </div>
+        </div>
+
+        <div class="content-area" id="contentArea">
+
+            <!-- ═══ DASHBOARD ═══ -->
+            <div class="section-content active" id="section-dashboard">
+                <!-- Announcements -->
+                <div class="announcement-bar fade-in" id="announcementBar">
+                    <i class="fas fa-bullhorn"></i>
+                    <div class="ann-text"><strong>SmartBus AI v3.0</strong> — Real-time crowd intelligence, AI journey planner, and alternate route suggestions active</div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card fade-in delay-1">
+                        <div class="stat-icon blue"><i class="fas fa-bus"></i></div>
+                        <div class="stat-info">
+                            <div class="num" id="totalBuses">—</div>
+                            <div class="label">Active Buses</div>
+                            <div class="trend up" id="busTrend">▲ Live</div>
+                        </div>
+                    </div>
+                    <div class="stat-card fade-in delay-2">
+                        <div class="stat-icon gold"><i class="fas fa-route"></i></div>
+                        <div class="stat-info">
+                            <div class="num" id="totalRoutes">—</div>
+                            <div class="label">Active Routes</div>
+                        </div>
+                    </div>
+                    <div class="stat-card fade-in delay-3">
+                        <div class="stat-icon green"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <div class="num" id="avgOccupancy">—</div>
+                            <div class="label">Avg Occupancy</div>
+                            <div class="trend up" id="occupancyTrend">▲ 0%</div>
+                        </div>
+                    </div>
+                    <div class="stat-card fade-in delay-4">
+                        <div class="stat-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="stat-info">
+                            <div class="num" id="highCrowd">—</div>
+                            <div class="label">High Crowd</div>
+                        </div>
+                    </div>
+                    <div class="stat-card fade-in delay-5">
+                        <div class="stat-icon purple"><i class="fas fa-clock"></i></div>
+                        <div class="stat-info">
+                            <div class="num" id="avgWait">—</div>
+                            <div class="label">Avg Wait Time</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Insight -->
+                <div class="ai-insight fade-in delay-3" id="aiInsight">
+                    <i class="fas fa-robot"></i>
+                    <div class="ai-text"><strong>AI Analysis:</strong> <span id="aiInsightText">Loading fleet intelligence...</span></div>
+                </div>
+
+                <!-- Main Grid -->
+                <div class="main-grid">
+                    <div class="map-wrapper fade-in delay-1">
+                        <div class="map-header">
+                            <h3><i class="fas fa-map-marked-alt"></i> Live Fleet · Chennai</h3>
+                            <span class="live-badge"><span class="pulse"></span> LIVE</span>
+                        </div>
+                        <div id="map"></div>
+                        <div class="map-legend">
+                            <span><span class="dot" style="background:var(--accent);"></span> Low</span>
+                            <span><span class="dot" style="background:var(--secondary);"></span> Medium</span>
+                            <span><span class="dot" style="background:var(--danger);"></span> High</span>
+                            <span><span class="dot" style="background:var(--primary);"></span> Stop</span>
+                        </div>
+                    </div>
+                    <div class="side-panel">
+                        <div class="card planner-card fade-in delay-2">
+                            <div class="card-header">
+                                <h3><i class="fas fa-route" style="color:var(--primary);"></i> Quick Planner</h3>
+                                <span class="ai-badge" style="font-size:0.5rem;padding:2px 10px;">AI</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="planner-row">
+                                    <select id="fromSelect"><option value="">📍 From</option></select>
+                                    <select id="toSelect"><option value="">📍 To</option></select>
+                                </div>
+                                <div class="planner-row">
+                                    <input type="datetime-local" id="departureTime" />
+                                    <button id="planBtn"><i class="fas fa-search"></i> Plan</button>
+                                    <button id="swapBtn" class="outline" title="Swap"><i class="fas fa-exchange-alt"></i></button>
+                                </div>
+                                <div class="planner-result" id="plannerResult">
+                                    <div id="resultLegs"></div>
+                                    <div class="summary" id="resultSummary"></div>
+                                    <div class="alt-route" id="altRoute" style="display:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card bus-list-card fade-in delay-3">
+                            <div class="card-header">
+                                <h3><i class="fas fa-list-ul" style="color:var(--primary);"></i> Live Buses</h3>
+                                <span class="badge" style="background:var(--primary);color:#fff;padding:2px 12px;border-radius:50px;font-size:0.6rem;font-weight:700;" id="listCount">0</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="bus-list-scroll" id="busList">
+                                    <div class="no-buses"><i class="fas fa-bus"></i>Loading buses...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-grid">
+                    <div class="card chart-card fade-in delay-3">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-pie" style="color:var(--secondary);"></i> Crowd Distribution</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="crowdChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card chart-card fade-in delay-4">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-line" style="color:var(--accent);"></i> Occupancy Trend</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity -->
+                <div class="card activity-card fade-in delay-4">
+                    <div class="card-header">
+                        <h3><i class="fas fa-bolt" style="color:var(--secondary);"></i> Live Activity</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="activity-list" id="activityFeed">
+                            <div class="no-buses"><i class="fas fa-circle-notch fa-spin"></i>Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ LIVE MAP ═══ -->
+            <div class="section-content" id="section-live-map">
+                <div class="section-header">
+                    <h2><i class="fas fa-map-marked-alt"></i> Live Fleet Map</h2>
+                    <span class="live-badge"><span class="pulse"></span> REAL-TIME</span>
+                </div>
+                <div class="map-wrapper" style="height:calc(100vh - 180px);">
+                    <div id="mapFull" style="height:100%;"></div>
+                </div>
+            </div>
+
+            <!-- ═══ PLANNER ═══ -->
+            <div class="section-content" id="section-planner">
+                <div class="section-header">
+                    <h2><i class="fas fa-route"></i> AI Journey Planner</h2>
+                    <span class="ai-badge" style="background:linear-gradient(135deg,var(--purple),var(--pink));color:#fff;padding:4px 16px;border-radius:50px;font-size:0.65rem;font-weight:700;">AI-POWERED</span>
+                </div>
+                <div class="card" style="max-width:650px;">
+                    <div class="card-body" style="padding:24px;">
+                        <div class="planner-row">
+                            <select id="fromSelectFull" style="flex:1;padding:12px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:0.85rem;outline:none;"><option value="">📍 From</option></select>
+                            <select id="toSelectFull" style="flex:1;padding:12px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:0.85rem;outline:none;"><option value="">📍 To</option></select>
+                        </div>
+                        <div class="planner-row" style="margin-top:12px;">
+                            <input type="datetime-local" id="departureTimeFull" style="flex:1;padding:12px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);outline:none;" />
+                            <button id="planBtnFull" style="padding:12px 32px;border-radius:var(--radius-sm);border:none;background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;font-weight:600;cursor:pointer;"><i class="fas fa-search"></i> Plan Route</button>
+                        </div>
+                        <div class="planner-result active" id="plannerResultFull" style="margin-top:16px;display:none;">
+                            <div id="resultLegsFull"></div>
+                            <div class="summary" id="resultSummaryFull"></div>
+                            <div class="alt-route" id="altRouteFull" style="display:none;"></div>
+                        </div>
+                        <div class="ai-insight" style="margin-top:16px;">
+                            <i class="fas fa-lightbulb"></i>
+                            <div class="ai-text"><strong>Smart Tip:</strong> Our AI analyzes real-time crowd data to suggest the most comfortable route with minimal crowding.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ ROUTES ═══ -->
+            <div class="section-content" id="section-routes">
+                <div class="section-header">
+                    <h2><i class="fas fa-directions"></i> Route Network</h2>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="routesList"><div class="no-buses"><i class="fas fa-circle-notch fa-spin"></i>Loading routes...</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ ANALYTICS ═══ -->
+            <div class="section-content" id="section-analytics">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-line"></i> Analytics Dashboard</h2>
+                </div>
+                <div class="charts-grid">
+                    <div class="card chart-card">
+                        <div class="card-header"><h3><i class="fas fa-chart-pie" style="color:var(--secondary);"></i> Crowd Distribution</h3></div>
+                        <div class="card-body"><canvas id="crowdChartFull" style="max-height:260px;"></canvas></div>
+                    </div>
+                    <div class="card chart-card">
+                        <div class="card-header"><h3><i class="fas fa-chart-line" style="color:var(--accent);"></i> Occupancy Trend (24h)</h3></div>
+                        <div class="card-body"><canvas id="trendChartFull" style="max-height:260px;"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ FAVORITES ═══ -->
+            <div class="section-content" id="section-favorites">
+                <div class="section-header">
+                    <h2><i class="fas fa-star"></i> Favorite Routes</h2>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="favoritesList"><div class="no-buses"><i class="fas fa-star"></i>Sign in to save your favorite routes</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ HISTORY ═══ -->
+            <div class="section-content" id="section-history">
+                <div class="section-header">
+                    <h2><i class="fas fa-clock"></i> Trip History</h2>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="tripHistory"><div class="no-buses"><i class="fas fa-clock"></i>Sign in to view your trip history</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ NOTIFICATIONS ═══ -->
+            <div class="section-content" id="section-notifications">
+                <div class="section-header">
+                    <h2><i class="fas fa-bell"></i> Notifications</h2>
+                    <button id="markAllReadBtn" style="padding:8px 18px;border-radius:8px;border:1.5px solid var(--border);background:#fff;color:var(--text-secondary);cursor:pointer;font-size:0.75rem;font-weight:500;"><i class="fas fa-check-double"></i> Mark All Read</button>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <div id="notificationList"><div class="no-buses"><i class="fas fa-circle-notch fa-spin"></i>Loading...</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ SOS ═══ -->
+            <div class="section-content" id="section-sos">
+                <div class="section-header">
+                    <h2><i class="fas fa-exclamation-triangle" style="color:var(--danger);"></i> SOS Emergency</h2>
+                </div>
+                <div class="card" style="max-width:500px;border-color:#fecaca;">
+                    <div class="card-body" style="padding:24px;">
+                        <p style="margin-bottom:16px;color:var(--text-secondary);font-size:0.85rem;">In case of emergency, send an alert with your location to authorities and SmartBus admin.</p>
+                        <div style="margin-bottom:14px;">
+                            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Message (optional)</label>
+                            <input type="text" id="sosMessage" placeholder="Describe your emergency..." style="width:100%;padding:11px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);color:var(--text);outline:none;font-family:inherit;" />
+                        </div>
+                        <button class="sos-btn" id="sosBtn"><i class="fas fa-exclamation-triangle"></i> Send SOS Alert</button>
+                        <p style="margin-top:10px;font-size:0.7rem;color:var(--text-muted);"><i class="fas fa-info-circle"></i> Your GPS location will be shared automatically.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- NOTIFICATION PANEL -->
+    <div class="notif-panel" id="notifPanel">
+        <div class="notif-panel-header">
+            <h3><i class="fas fa-bell"></i> Notifications</h3>
+            <button id="notifPanelClose"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="notif-panel-body" id="notifPanelBody">
+            <div class="notif-empty"><i class="fas fa-bell-slash"></i>No notifications</div>
+        </div>
+    </div>
+
+    <!-- AUTH MODAL -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-box">
+            <h2><i class="fas fa-bus"></i> Smart<span style="color:var(--secondary);">Bus</span></h2>
+            <div class="sub">Sign in to your account</div>
+            <div id="authForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="authEmail" placeholder="you@example.com" value="pass@smartbus.com" />
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="authPassword" placeholder="Enter password" value="pass123" />
+                </div>
+                <div class="auth-error" id="authError">Invalid credentials</div>
+                <button class="primary" id="authSubmit"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+                <div class="auth-switch">
+                    <span id="authSwitchText">Don't have an account? <a id="authSwitchLink">Register</a></span>
+                </div>
+                <div class="demo-info">
+                    <strong>🔑 Demo Credentials:</strong><br>
+                    👑 Admin: admin@smartbus.com / admin123<br>
+                    👤 User: pass@smartbus.com / pass123<br>
+                    📋 Manager: manager@smartbus.com / manager123
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            const CAPACITY = 60;
+            const API_BASE = '';
+            let token = localStorage.getItem('smartbus_token') || null;
+            let user = null;
+            let socket = null;
+            let allBuses = [];
+            let busStops = [];
+            let allRoutes = [];
+            let mapInstance = null;
+            let mapFullInstance = null;
+            let mapMarkers = {};
+            let mapFullMarkers = {};
+            let stopMarkers = [];
+            let userMarker = null;
+            let chartCrowd = null;
+            let chartTrend = null;
+            let chartCrowdFull = null;
+            let chartTrendFull = null;
+            let trendData = [];
+            let activityLog = [];
+            let notifications = [];
+            let unreadCount = 0;
+            let currentSection = 'dashboard';
+            let isRegistering = false;
+
+            const $ = (id) => document.getElementById(id);
+            const fromSelect = $('fromSelect');
+            const toSelect = $('toSelect');
+            const fromSelectFull = $('fromSelectFull');
+            const toSelectFull = $('toSelectFull');
+            const departureTime = $('departureTime');
+            const departureTimeFull = $('departureTimeFull');
+            const planBtn = $('planBtn');
+            const planBtnFull = $('planBtnFull');
+            const swapBtn = $('swapBtn');
+            const refreshBtn = $('refreshBtn');
+            const busList = $('busList');
+            const listCount = $('listCount');
+            const totalBusesEl = $('totalBuses');
+            const totalRoutesEl = $('totalRoutes');
+            const avgOccupancyEl = $('avgOccupancy');
+            const highCrowdEl = $('highCrowd');
+            const avgWaitEl = $('avgWait');
+            const plannerResult = $('plannerResult');
+            const resultLegs = $('resultLegs');
+            const resultSummary = $('resultSummary');
+            const altRoute = $('altRoute');
+            const plannerResultFull = $('plannerResultFull');
+            const resultLegsFull = $('resultLegsFull');
+            const resultSummaryFull = $('resultSummaryFull');
+            const altRouteFull = $('altRouteFull');
+            const userName = $('userName');
+            const userRole = $('userRole');
+            const avatarLetter = $('avatarLetter');
+            const loginBtn = $('loginBtn');
+            const logoutBtn = $('logoutBtn');
+            const authModal = $('authModal');
+            const authEmail = $('authEmail');
+            const authPassword = $('authPassword');
+            const authSubmit = $('authSubmit');
+            const authError = $('authError');
+            const authSwitchLink = $('authSwitchLink');
+            const authSwitchText = $('authSwitchText');
+            const statusDot = $('statusDot');
+            const statusText = $('statusText');
+            const notifBadge = $('notifBadge');
+            const notifDot = $('notifDot');
+            const notifPanelBtn = $('notifPanelBtn');
+            const notifPanel = $('notifPanel');
+            const notifPanelClose = $('notifPanelClose');
+            const notifPanelBody = $('notifPanelBody');
+            const notificationList = $('notificationList');
+            const markAllReadBtn = $('markAllReadBtn');
+            const activityFeed = $('activityFeed');
+            const mobileMenuBtn = $('mobileMenuBtn');
+            const sidebar = $('sidebar');
+            const sidebarOverlay = $('sidebarOverlay');
+            const pageTitle = $('pageTitle');
+            const pageIcon = $('pageIcon');
+            const aiInsightText = $('aiInsightText');
+
+            function rand(min, max) { return Math.random() * (max - min) + min; }
+            function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
+            function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+            function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+            function getStatus(p) { if (p > 44) return 'high'; if (p > 24) return 'medium'; return 'low'; }
+            function formatTime(d) { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+            function formatDate(d) { return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + formatTime(d); }
+            function timeAgo(dateStr) {
+                const now = new Date();
+                const d = new Date(dateStr);
+                const diff = Math.floor((now - d) / 1000);
+                if (diff < 60) return 'just now';
+                if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+                return formatDate(d);
+            }
+
+            // ─── AUTH ───
+            function setAuth(tokenVal, userData) {
+                token = tokenVal;
+                user = userData;
+                if (token) {
+                    localStorage.setItem('smartbus_token', token);
+                    loginBtn.style.display = 'none';
+                    logoutBtn.style.display = 'flex';
+                    userName.textContent = user.full_name || 'User';
+                    userRole.textContent = user.role || 'passenger';
+                    avatarLetter.textContent = (user.full_name || 'U')[0];
+                    statusDot.className = 'dot online';
+                    statusText.textContent = 'Online';
+                    connectSocket();
+                    loadDashboardData();
+                } else {
+                    localStorage.removeItem('smartbus_token');
+                    loginBtn.style.display = 'flex';
+                    logoutBtn.style.display = 'none';
+                    userName.textContent = 'Guest User';
+                    userRole.textContent = 'Not signed in';
+                    avatarLetter.textContent = 'G';
+                    statusDot.className = 'dot offline';
+                    statusText.textContent = 'Offline';
+                    if (socket) { socket.disconnect(); socket = null; }
+                }
+            }
+
+            async function login(email, password) {
+                try {
+                    const res = await fetch(API_BASE + '/api/auth/login', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Login failed');
+                    setAuth(data.token, data.user);
+                    authModal.classList.remove('open');
+                    authError.classList.remove('show');
+                    loadNotifications();
+                    return true;
+                } catch (err) {
+                    authError.textContent = err.message;
+                    authError.classList.add('show');
+                    return false;
+                }
+            }
+
+            async function register(email, password, full_name) {
+                try {
+                    const res = await fetch(API_BASE + '/api/auth/register', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password, full_name, phone: '', role: 'passenger' })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Registration failed');
+                    setAuth(data.token, data.user);
+                    authModal.classList.remove('open');
+                    authError.classList.remove('show');
+                    return true;
+                } catch (err) {
+                    authError.textContent = err.message;
+                    authError.classList.add('show');
+                    return false;
+                }
+            }
+
+            async function fetchUser() {
+                if (!token) return;
+                try {
+                    const res = await fetch(API_BASE + '/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+                    if (!res.ok) throw new Error('Unauthorized');
+                    user = await res.json();
+                    setAuth(token, user);
+                } catch (err) { setAuth(null, null); }
+            }
+
+            // ─── SOCKET ───
+            function connectSocket() {
+                if (socket) socket.disconnect();
+                if (!token) return;
+                socket = io(API_BASE || '/', { auth: { token }, transports: ['websocket', 'polling'] });
+                socket.on('connect', () => { statusDot.className = 'dot online'; statusText.textContent = 'Online'; });
+                socket.on('disconnect', () => { statusDot.className = 'dot offline'; statusText.textContent = 'Offline'; });
+                socket.on('bus-location', (data) => updateBusMarkerOnMap(data));
+                socket.on('crowd-change', (data) => updateBusCrowd(data));
+                socket.on('dashboard-stats', (data) => { updateStatsFromServer(data); updateBusListFromData(data.buses || []); });
+                socket.on('reroute-suggestion', (data) => {
+                    addActivity('crowd', '🔄 Reroute Suggested', `${data.message}`);
+                });
+            }
+
+            function updateBusMarkerOnMap(data) {
+                const map = mapInstance;
+                if (!map) return;
+                const { busId, lat, lng, crowdLevel, passengers } = data;
+                if (!lat || !lng) return;
+                const status = crowdLevel || 'low';
+                if (mapMarkers[busId]) {
+                    mapMarkers[busId].setLatLng([lat, lng]);
+                    mapMarkers[busId].setIcon(createBusIcon(status));
+                } else {
+                    const icon = createBusIcon(status);
+                    const marker = L.marker([lat, lng], { icon, title: busId }).addTo(map);
+                    marker.bindPopup(`<strong>${busId}</strong><br>Status: <strong>${status.toUpperCase()}</strong><br>👥 ${passengers || '?'} / ${CAPACITY}`);
+                    mapMarkers[busId] = marker;
+                }
+            }
+
+            function updateBusCrowd(data) {
+                document.querySelectorAll('.bus-item').forEach(item => {
+                    if (item.dataset.id === data.busId) {
+                        const statusEl = item.querySelector('.status-badge');
+                        if (statusEl) { statusEl.textContent = data.crowdLevel; statusEl.className = 'status-badge ' + data.crowdLevel; }
+                        const paxEl = item.querySelector('.pax');
+                        if (paxEl && data.passengers) paxEl.textContent = data.passengers;
+                        item.className = 'bus-item ' + (data.crowdLevel || 'low');
+                    }
+                });
+            }
+
+            // ─── API ───
+            async function apiFetch(path, options = {}) {
+                const headers = { 'Content-Type': 'application/json', ...options.headers };
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+                try {
+                    const res = await fetch(API_BASE + path, { ...options, headers });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Request failed');
+                    return data;
+                } catch (err) { console.error('API Error:', path, err); throw err; }
+            }
+
+            async function loadDashboardData() {
+                try {
+                    const stats = await apiFetch('/api/dashboard/stats');
+                    updateStatsUI(stats);
+                    if (stats.aiInsights) {
+                        const rec = stats.aiInsights.recommendation || 'Fleet operating efficiently';
+                        const crowded = stats.aiInsights.totalCrowdedRoutes || 0;
+                        aiInsightText.textContent = crowded > 0 ?
+                            `${crowded} route(s) heavily crowded. ${rec}` :
+                            `All routes operating normally. ${rec}`;
+                    }
+                    const stops = await apiFetch('/api/stops');
+                    busStops = stops;
+                    populateDropdowns();
+                    const buses = await apiFetch('/api/buses');
+                    allBuses = buses;
+                    updateBusList(buses);
+                    updateCharts(buses);
+                    drawStops(stops);
+                    drawBuses(buses);
+                    loadNotifications();
+                    loadActivity();
+                    loadRoutes();
+                    loadFavorites();
+                } catch (err) { console.error('Failed to load dashboard:', err); }
+            }
+
+            function updateStatsUI(stats) {
+                totalBusesEl.textContent = stats.totalBuses || 0;
+                totalRoutesEl.textContent = stats.totalRoutes || 0;
+                avgOccupancyEl.textContent = (stats.avgOccupancy || 0) + '%';
+                highCrowdEl.textContent = stats.highCrowd || 0;
+                avgWaitEl.textContent = (stats.avgWait || 0) + 'm';
+            }
+
+            function updateStatsFromServer(data) {
+                if (data.totalBuses !== undefined) totalBusesEl.textContent = data.totalBuses;
+                if (data.avgOccupancy !== undefined) avgOccupancyEl.textContent = data.avgOccupancy + '%';
+                if (data.highCrowd !== undefined) highCrowdEl.textContent = data.highCrowd;
+                if (data.avgWait !== undefined) avgWaitEl.textContent = data.avgWait + 'm';
+            }
+
+            // ─── DROPDOWNS ───
+            function populateDropdowns() {
+                [fromSelect, toSelect, fromSelectFull, toSelectFull].forEach(sel => {
+                    sel.innerHTML = '<option value="">📍 Select stop</option>';
+                    busStops.forEach(stop => {
+                        const o = document.createElement('option');
+                        o.value = stop.id;
+                        o.textContent = stop.name;
+                        sel.appendChild(o);
+                    });
+                });
+                const now = new Date();
+                const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+                const val = local.toISOString().slice(0, 16);
+                departureTime.value = val;
+                departureTimeFull.value = val;
+            }
+
+            // ─── BUS LIST ───
+            function updateBusList(buses) {
+                if (!buses || buses.length === 0) {
+                    busList.innerHTML = '<div class="no-buses"><i class="fas fa-bus"></i>No buses available</div>';
+                    listCount.textContent = '0';
+                    return;
+                }
+                listCount.textContent = buses.length;
+                const order = { high: 0, medium: 1, low: 2 };
+                const sorted = [...buses].sort((a, b) => order[a.crowd_level || 'low'] - order[b.crowd_level || 'low']);
+                let html = '';
+                sorted.forEach(b => {
+                    const cls = b.crowd_level || 'low';
+                    const eta = b.eta_minutes || '—';
+                    html += `<div class="bus-item ${cls}" data-id="${b.id}" onclick="window.selectBus('${b.id}')">
+                        <span class="num">${b.registration || b.id.slice(0,8)}</span>
+                        <span class="route">${b.route_name || 'Unknown'}</span>
+                        <span class="status-badge ${cls}">${cls}</span>
+                        <span class="pax">${b.passengers_count || 0}</span>
+                        <span class="eta">${eta}m</span>
+                    </div>`;
+                });
+                busList.innerHTML = html;
+            }
+
+            function updateBusListFromData(buses) {
+                if (!buses || buses.length === 0) return;
+                const order = { high: 0, medium: 1, low: 2 };
+                const sorted = [...buses].sort((a, b) => order[a.crowd_level || 'low'] - order[b.crowd_level || 'low']);
+                let html = '';
+                sorted.forEach(b => {
+                    const cls = b.crowd_level || 'low';
+                    const eta = b.eta_minutes || '—';
+                    html += `<div class="bus-item ${cls}" data-id="${b.id}" onclick="window.selectBus('${b.id}')">
+                        <span class="num">${b.registration || b.id.slice(0,8)}</span>
+                        <span class="route">${b.route_name || 'Unknown'}</span>
+                        <span class="status-badge ${cls}">${cls}</span>
+                        <span class="pax">${b.passengers_count || 0}</span>
+                        <span class="eta">${eta}m</span>
+                    </div>`;
+                });
+                busList.innerHTML = html;
+                listCount.textContent = buses.length;
+            }
+
+            window.selectBus = function(id) {
+                const map = mapInstance;
+                if (!map) return;
+                const marker = mapMarkers[id];
+                if (marker) { map.setView(marker.getLatLng(), 16); marker.openPopup(); }
+                else { map.setView([13.0827, 80.2707], 14); }
+                document.querySelectorAll('.bus-item').forEach(el => {
+                    el.style.background = el.dataset.id === id ? '#dbeafe' : '';
+                });
+            };
+
+            // ─── MAP ───
+            function initMap() {
+                if (!mapInstance) {
+                    mapInstance = L.map('map', { zoomControl: false, attributionControl: false }).setView([13.0827, 80.2707], 12);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mapInstance);
+                    L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(pos => {
+                            const { latitude, longitude } = pos.coords;
+                            mapInstance.setView([latitude, longitude], 13);
+                            if (userMarker) mapInstance.removeLayer(userMarker);
+                            userMarker = L.marker([latitude, longitude], {
+                                icon: L.divIcon({ className: 'user-marker', html: '<i class="fas fa-map-pin"></i>', iconSize: [28, 28], iconAnchor: [14, 28] })
+                            }).addTo(mapInstance).bindPopup('You are here');
+                        }, () => {});
+                    }
+                    setTimeout(() => mapInstance.invalidateSize(), 200);
+                }
+            }
+
+            function createBusIcon(status) {
+                return L.divIcon({ className: `bus-marker ${status}`, html: '<div><i class="fas fa-bus"></i></div>', iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -19] });
+            }
+
+            function createStopIcon(idx) {
+                return L.divIcon({ className: 'stop-marker', html: `<div>${idx + 1}</div>`, iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -11] });
+            }
+
+            function drawStops(stops) {
+                if (!mapInstance) return;
+                stopMarkers.forEach(m => mapInstance.removeLayer(m));
+                stopMarkers = [];
+                stops.forEach((stop, idx) => {
+                    const m = L.marker([stop.lat, stop.lng], { icon: createStopIcon(idx) }).addTo(mapInstance)
+                        .bindPopup(`<strong>${stop.name}</strong><br><span style="font-size:0.7rem;color:#888;">${stop.zone || ''}</span>`);
+                    stopMarkers.push(m);
+                });
+            }
+
+            function drawBuses(buses) {
+                if (!mapInstance) return;
+                Object.values(mapMarkers).forEach(m => mapInstance.removeLayer(m));
+                mapMarkers = {};
+                buses.forEach(bus => {
+                    if (!bus.current_lat || !bus.current_lng) return;
+                    const status = bus.crowd_level || 'low';
+                    const marker = L.marker([bus.current_lat, bus.current_lng], { icon: createBusIcon(status), title: `${bus.registration} · ${bus.passengers_count || 0}/${CAPACITY}` }).addTo(mapInstance);
+                    marker.bindPopup(`<strong>${bus.registration || 'Bus'}</strong><br><span style="font-size:0.75rem;">${bus.route_name || ''}</span><br><span style="display:inline-block;padding:2px 12px;border-radius:50px;font-size:0.6rem;font-weight:700;text-transform:uppercase;background:${status==='high'?'#fee2e2':'#fef3c7'};color:${status==='high'?'#dc2626':'#d97706'};">${status.toUpperCase()}</span><br>👥 ${bus.passengers_count || 0} / ${CAPACITY}<br>⏱️ ETA: ${bus.eta_minutes || '—'} min<br>🚌 ${bus.driver_name || ''}`);
+                    mapMarkers[bus.id] = marker;
+                });
+            }
+
+            // ─── CHARTS ───
+            function updateCharts(buses) {
+                if (!buses) buses = allBuses;
+                const high = buses.filter(b => (b.crowd_level || 'low') === 'high').length;
+                const medium = buses.filter(b => (b.crowd_level || 'low') === 'medium').length;
+                const low = buses.filter(b => (b.crowd_level || 'low') === 'low').length;
+
+                const ctx = document.getElementById('crowdChart').getContext('2d');
+                const ctxFull = document.getElementById('crowdChartFull');
+                const chartData = { labels: ['High Crowd', 'Medium Crowd', 'Low Crowd'], datasets: [{ data: [high, medium, low], backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], borderWidth: 0 }] };
+                const chartOpts = { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 10, color: '#64748b' } } } }, cutout: '72%' };
+
+                if (chartCrowd) { chartCrowd.data = chartData; chartCrowd.update(); }
+                else chartCrowd = new Chart(ctx, { type: 'doughnut', data: chartData, options: chartOpts });
+
+                if (ctxFull) {
+                    if (chartCrowdFull) { chartCrowdFull.data = chartData; chartCrowdFull.update(); }
+                    else chartCrowdFull = new Chart(ctxFull, { type: 'doughnut', data: chartData, options: { ...chartOpts, cutout: '70%' } });
+                }
+
+                const now = Date.now();
+                if (trendData.length === 0) { for (let i = 0; i < 12; i++) trendData.push({ time: now - (11 - i) * 3600000, value: randInt(18, 50) }); }
+                const latest = buses.length > 0 ? buses.reduce((s, b) => s + (b.passengers_count || 0), 0) / buses.length : 0;
+                trendData.push({ time: now, value: Math.round(latest) });
+                if (trendData.length > 24) trendData.shift();
+
+                const labels = trendData.map(d => formatTime(new Date(d.time)));
+                const values = trendData.map(d => d.value);
+                const trendConfig = {
+                    type: 'line',
+                    data: { labels, datasets: [{ label: 'Avg Passengers', data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.06)', fill: true, tension: 0.4, pointRadius: 2, pointBackgroundColor: '#3b82f6', borderWidth: 2 }] },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: CAPACITY, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 8 }, maxTicksLimit: 12 } } } }
+                };
+
+                const ctx2 = document.getElementById('trendChart').getContext('2d');
+                const ctx2Full = document.getElementById('trendChartFull');
+                if (chartTrend) { chartTrend.data.labels = labels; chartTrend.data.datasets[0].data = values; chartTrend.update(); }
+                else chartTrend = new Chart(ctx2, trendConfig);
+                if (ctx2Full) {
+                    if (chartTrendFull) { chartTrendFull.data.labels = labels; chartTrendFull.data.datasets[0].data = values; chartTrendFull.update(); }
+                    else chartTrendFull = new Chart(ctx2Full, { ...trendConfig, options: { ...trendConfig.options, responsive: true } });
+                }
+            }
+
+            // ─── NOTIFICATIONS ───
+            async function loadNotifications() {
+                if (!token) {
+                    notificationList.innerHTML = '<div class="no-buses"><i class="fas fa-bell-slash"></i>Sign in to see notifications</div>';
+                    return;
+                }
+                try {
+                    const data = await apiFetch('/api/notifications');
+                    notifications = data.notifications || [];
+                    unreadCount = data.unreadCount || 0;
+                    renderNotifications();
+                    updateNotifBadge();
+                } catch (err) { console.error('Failed to load notifications:', err); }
+            }
+
+            function renderNotifications() {
+                if (notifications.length === 0) {
+                    notifPanelBody.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i>No notifications</div>';
+                    notificationList.innerHTML = '<div class="no-buses"><i class="fas fa-bell-slash"></i>No notifications yet</div>';
+                    return;
+                }
+                let panelHtml = '', listHtml = '';
+                notifications.forEach(n => {
+                    const cls = n.is_read ? '' : 'unread';
+                    const time = timeAgo(n.created_at);
+                    const item = `<div class="notif-item ${cls}" onclick="window.markNotifRead('${n.id}')"><div class="notif-title">${n.title}</div><div class="notif-body">${n.body}</div><div class="notif-time">${time}</div></div>`;
+                    panelHtml += item;
+                    listHtml += item;
+                });
+                notifPanelBody.innerHTML = panelHtml;
+                notificationList.innerHTML = listHtml;
+            }
+
+            window.markNotifRead = async function(id) {
+                try { await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify({ id }) }); loadNotifications(); } catch (err) {}
+            };
+
+            function updateNotifBadge() {
+                if (unreadCount > 0) { notifBadge.style.display = 'inline'; notifBadge.textContent = unreadCount; notifDot.classList.add('show'); }
+                else { notifBadge.style.display = 'none'; notifDot.classList.remove('show'); }
+            }
+
+            // ─── ACTIVITY ───
+            function addActivity(type, title, desc) {
+                activityLog.unshift({ type, title, desc, time: new Date().toISOString() });
+                if (activityLog.length > 20) activityLog.pop();
+                renderActivity();
+            }
+
+            function renderActivity() {
+                if (activityLog.length === 0) { activityFeed.innerHTML = '<div class="no-buses"><i class="fas fa-bolt"></i>No recent activity</div>'; return; }
+                let html = '';
+                activityLog.forEach(a => {
+                    const icons = { crowd: 'fa-exclamation-triangle', route: 'fa-bus', system: 'fa-cog', success: 'fa-check-circle' };
+                    const icon = icons[a.type] || 'fa-info-circle';
+                    html += `<div class="activity-item"><div class="act-icon ${a.type}"><i class="fas ${icon}"></i></div><div class="act-text"><div class="act-title">${a.title}</div><div class="act-desc">${a.desc}</div></div><div class="act-time">${timeAgo(a.time)}</div></div>`;
+                });
+                activityFeed.innerHTML = html;
+            }
+
+            function loadActivity() {
+                const samples = [
+                    { type: 'crowd', title: 'High Crowd Detected', desc: 'Bus TN-01-AB-1234 at Anna Nagar is heavily crowded (52/60)' },
+                    { type: 'route', title: 'Bus Arriving', desc: 'Bus TN-01-AC-9012 arriving at T.Nagar in 2 minutes' },
+                    { type: 'success', title: 'Alternate Route Found', desc: 'Route 55B via Guindy has low occupancy (18/60)' },
+                    { type: 'system', title: 'AI Engine Active', desc: 'Crowd prediction models running at 92% accuracy' },
+                ];
+                samples.forEach(a => { a.time = new Date(Date.now() - randInt(0, 3600000)).toISOString(); activityLog.push(a); });
+                renderActivity();
+                setInterval(() => {
+                    const types = ['crowd', 'route', 'success', 'system'];
+                    const t = pick(types);
+                    const titles = { crowd: 'Crowd Level Updated', route: 'Bus Movement Detected', success: 'Route Optimized', system: 'AI Sync Complete' };
+                    const descs = {
+                        crowd: `Bus ${pick(['TN-01-AB-1234','TN-01-AC-9012','TN-01-AE-6789'])} crowd changed to ${pick(['high','medium','low'])}`,
+                        route: `Bus ${pick(['TN-01-AD-7890','TN-01-AF-4567','TN-01-AG-2345'])} moving on ${pick(['Route 42A','Route 19B','Route 70A'])}`,
+                        success: `Alternate route suggested for ${pick(['Anna Nagar','T.Nagar','Velachery'])}`,
+                        system: 'Live data stream · ' + new Date().toLocaleTimeString()
+                    };
+                    addActivity(t, titles[t], descs[t]);
+                }, 14000);
+            }
+
+            // ─── PLANNER ───
+            async function planJourney(fromId, toId, resultEl, legsEl, summaryEl, altEl) {
+                if (!fromId || !toId || fromId === toId) { resultEl.classList.remove('active'); resultEl.style.display = 'none'; return; }
+                try {
+                    const data = await apiFetch('/api/plan', { method: 'POST', body: JSON.stringify({ fromStopId: fromId, toStopId: toId }) });
+                    const fromStop = busStops.find(s => s.id === fromId);
+                    const toStop = busStops.find(s => s.id === toId);
+                    let legsHtml = '';
+                    (data.primary?.legs || []).forEach((leg, idx) => {
+                        legsHtml += `<div class="leg"><span class="route-badge">${leg.routeName || 'R'+(idx+1)}</span><span class="stop-name">${leg.fromStopName || 'Start'}</span><span class="arrow"><i class="fas fa-arrow-right"></i></span><span class="stop-name">${leg.toStopName || 'End'}</span><span style="color:var(--text-muted);font-size:0.65rem;margin-left:auto;">${leg.duration || '?'} min</span></div>`;
+                    });
+                    const totalMin = data.primary?.totalTime || 0;
+                    const totalFare = data.primary?.totalFare || 0;
+                    const transfers = data.primary?.transfers || 0;
+                    legsEl.innerHTML = legsHtml;
+                    summaryEl.innerHTML = `<span><strong>⏱️ ${totalMin} min</strong></span><span><i class="fas fa-exchange-alt"></i> ${transfers} transfer${transfers!==1?'s':''}</span><span><i class="fas fa-walking"></i> ~${Math.round(totalMin*0.08)} min walk</span><span><i class="fas fa-rupee-sign"></i> ₹${totalFare}</span>`;
+                    resultEl.classList.add('active');
+                    resultEl.style.display = 'block';
+
+                    if (data.alternate && altEl) {
+                        const altTime = data.alternate.totalTime || 0;
+                        const altFare = data.alternate.totalFare || 0;
+                        altEl.style.display = 'block';
+                        altEl.innerHTML = `<i class="fas fa-route"></i> <strong>Alternate Route Available:</strong> ${altTime} min · ₹${altFare} · ${data.alternate.transfers} transfer(s) — less crowded option`;
+                    } else if (altEl) { altEl.style.display = 'none'; }
+
+                    addActivity('route', 'Route Planned', `${fromStop?.name||'Start'} → ${toStop?.name||'End'} · ${totalMin} min · ₹${totalFare}`);
+                } catch (err) { resultEl.classList.remove('active'); resultEl.style.display = 'none'; console.error('Planning failed:', err); }
+            }
+
+            // ─── ROUTES ───
+            async function loadRoutes() {
+                try {
+                    const routes = await apiFetch('/api/routes');
+                    allRoutes = routes;
+                    const container = document.getElementById('routesList');
+                    if (!container) return;
+                    if (routes.length === 0) { container.innerHTML = '<div class="no-buses">No routes available</div>'; return; }
+                    let html = '<div style="display:grid;gap:8px;">';
+                    routes.forEach(r => {
+                        html += `<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--border);">
+                            <span style="background:var(--primary);color:#fff;padding:4px 12px;border-radius:6px;font-size:0.7rem;font-weight:700;">${r.number || 'R'}</span>
+                            <span style="font-weight:600;font-size:0.85rem;">${r.name}</span>
+                            <span style="font-size:0.72rem;color:var(--text-secondary);">₹${r.fare_base || 20}</span>
+                            <span style="font-size:0.7rem;color:var(--text-muted);margin-left:auto;">${r.duration_min || '?'} min · Every ${r.frequency_min || '?'} min</span>
+                        </div>`;
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                } catch (err) { console.error('Failed to load routes:', err); }
+            }
+
+            // ─── FAVORITES ───
+            async function loadFavorites() {
+                const container = document.getElementById('favoritesList');
+                if (!container) return;
+                if (!token) { container.innerHTML = '<div class="no-buses"><i class="fas fa-star"></i>Sign in to save your favorite routes</div>'; return; }
+                try {
+                    const favs = await apiFetch('/api/favorites');
+                    if (favs.length === 0) { container.innerHTML = '<div class="no-buses"><i class="fas fa-star"></i>No favorite routes yet. Plan a journey and save it!</div>'; return; }
+                    let html = '';
+                    favs.forEach(f => {
+                        html += `<div class="fav-item"><i class="fas fa-star"></i><div class="fav-text"><div class="fav-name">${f.from_name || 'From'} → ${f.to_name || 'To'}</div><div class="fav-route">${f.nickname || 'Favorite route'}</div></div></div>`;
+                    });
+                    container.innerHTML = html;
+                } catch (err) { container.innerHTML = '<div class="no-buses">Failed to load favorites</div>'; }
+            }
+
+            // ─── SOS ───
+            async function sendSos() {
+                if (!token) { authModal.classList.add('open'); return; }
+                const message = document.getElementById('sosMessage').value || 'SOS emergency alert from SmartBus user';
+                try {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(async (pos) => {
+                            const { latitude, longitude } = pos.coords;
+                            await apiFetch('/api/sos', { method: 'POST', body: JSON.stringify({ busId: null, lat: latitude, lng: longitude, message }) });
+                            document.getElementById('sosMessage').value = '';
+                            alert('✅ SOS Alert sent! Authorities notified.');
+                            addActivity('system', '🚨 SOS Alert Sent', 'Emergency alert with your location was sent');
+                        }, async () => {
+                            await apiFetch('/api/sos', { method: 'POST', body: JSON.stringify({ busId: null, lat: 13.0827, lng: 80.2707, message }) });
+                            alert('✅ SOS Alert sent (approximate location)');
+                        });
+                    } else {
+                        await apiFetch('/api/sos', { method: 'POST', body: JSON.stringify({ busId: null, lat: 13.0827, lng: 80.2707, message }) });
+                        alert('✅ SOS Alert sent');
+                    }
+                } catch (err) { alert('❌ Failed: ' + err.message); }
+            }
+
+            // ─── NAVIGATION ───
+            function switchSection(section) {
+                currentSection = section;
+                document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
+                const target = document.getElementById('section-' + section);
+                if (target) target.classList.add('active');
+                document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.toggle('active', a.dataset.section === section));
+                const titles = {
+                    dashboard: ['Dashboard', 'fa-th-large'], 'live-map': ['Live Map', 'fa-map-marked-alt'],
+                    planner: ['Journey Planner', 'fa-route'], routes: ['Routes', 'fa-directions'],
+                    analytics: ['Analytics', 'fa-chart-line'], favorites: ['Favorites', 'fa-star'],
+                    history: ['Trip History', 'fa-clock'], notifications: ['Notifications', 'fa-bell'],
+                    sos: ['SOS Emergency', 'fa-exclamation-triangle']
+                };
+                const [title, icon] = titles[section] || ['Dashboard', 'fa-th-large'];
+                pageTitle.textContent = title;
+                pageIcon.className = 'fas ' + icon;
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('show');
+                if (section === 'live-map' && !mapFullInstance) initFullMap();
+                if (section === 'dashboard' && !mapInstance) { setTimeout(() => { initMap(); if (busStops.length > 0) { drawStops(busStops); drawBuses(allBuses); } }, 100); }
+            }
+
+            function initFullMap() {
+                mapFullInstance = L.map('mapFull', { zoomControl: false }).setView([13.0827, 80.2707], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mapFullInstance);
+                L.control.zoom({ position: 'bottomright' }).addTo(mapFullInstance);
+                if (busStops.length > 0) busStops.forEach((stop, idx) => L.marker([stop.lat, stop.lng], { icon: createStopIcon(idx) }).addTo(mapFullInstance).bindPopup(`<strong>${stop.name}</strong>`));
+                allBuses.forEach(bus => {
+                    if (!bus.current_lat || !bus.current_lng) return;
+                    const marker = L.marker([bus.current_lat, bus.current_lng], { icon: createBusIcon(bus.crowd_level || 'low') }).addTo(mapFullInstance);
+                    marker.bindPopup(`<strong>${bus.registration || bus.id}</strong><br>${bus.route_name || ''}<br>👥 ${bus.passengers_count || 0}/${CAPACITY}`);
+                    mapFullMarkers[bus.id] = marker;
+                });
+                setTimeout(() => mapFullInstance.invalidateSize(), 300);
+            }
+
+            // ─── EVENTS ───
+            loginBtn.addEventListener('click', () => {
+                authModal.classList.add('open');
+                isRegistering = false;
+                authSubmit.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+                authSwitchText.innerHTML = `Don't have an account? <a id="authSwitchLink">Register</a>`;
+                document.getElementById('authSwitchLink').addEventListener('click', toggleAuthMode);
+            });
+
+            logoutBtn.addEventListener('click', () => { setAuth(null, null); loadDashboardData(); });
+
+            function toggleAuthMode() {
+                isRegistering = !isRegistering;
+                if (isRegistering) {
+                    authSubmit.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+                    authSwitchText.innerHTML = `Already have an account? <a id="authSwitchLink">Sign In</a>`;
+                    const nameGroup = document.createElement('div');
+                    nameGroup.className = 'form-group'; nameGroup.id = 'regNameGroup';
+                    nameGroup.innerHTML = '<label>Full Name</label><input type="text" id="regName" placeholder="John Doe" />';
+                    authEmail.parentNode.insertBefore(nameGroup, authEmail);
+                } else {
+                    authSubmit.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+                    authSwitchText.innerHTML = `Don't have an account? <a id="authSwitchLink">Register</a>`;
+                    const rg = document.getElementById('regNameGroup');
+                    if (rg) rg.remove();
+                }
+                document.getElementById('authSwitchLink').addEventListener('click', toggleAuthMode);
+                authError.classList.remove('show');
+            }
+
+            authSubmit.addEventListener('click', async () => {
+                const email = authEmail.value.trim();
+                const password = authPassword.value;
+                if (!email || !password) { authError.textContent = 'Please fill in all fields'; authError.classList.add('show'); return; }
+                authSubmit.disabled = true;
+                authSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                let success;
+                if (isRegistering) {
+                    const name = document.getElementById('regName')?.value.trim() || email.split('@')[0];
+                    success = await register(email, password, name);
+                } else { success = await login(email, password); }
+                authSubmit.disabled = false;
+                authSubmit.innerHTML = isRegistering ? '<i class="fas fa-user-plus"></i> Create Account' : '<i class="fas fa-sign-in-alt"></i> Sign In';
+                if (success) loadDashboardData();
+            });
+
+            authEmail.addEventListener('keydown', (e) => { if (e.key === 'Enter') authSubmit.click(); });
+            authPassword.addEventListener('keydown', (e) => { if (e.key === 'Enter') authSubmit.click(); });
+            authModal.addEventListener('click', (e) => { if (e.target === authModal) authModal.classList.remove('open'); });
+
+            planBtn.addEventListener('click', () => planJourney(fromSelect.value, toSelect.value, plannerResult, resultLegs, resultSummary, altRoute));
+            planBtnFull.addEventListener('click', () => planJourney(fromSelectFull.value, toSelectFull.value, plannerResultFull, resultLegsFull, resultSummaryFull, altRouteFull));
+            swapBtn.addEventListener('click', () => { const tmp = fromSelect.value; fromSelect.value = toSelect.value; toSelect.value = tmp; });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.target === fromSelect || e.target === toSelect || e.target === fromSelectFull || e.target === toSelectFull)) {
+                    if (e.target === fromSelect || e.target === toSelect) planBtn.click();
+                    else planBtnFull.click();
+                }
+            });
+
+            refreshBtn.addEventListener('click', () => { refreshBtn.querySelector('i').classList.add('fa-spin'); loadDashboardData(); setTimeout(() => refreshBtn.querySelector('i').classList.remove('fa-spin'), 600); });
+            notifPanelBtn.addEventListener('click', () => notifPanel.classList.toggle('open'));
+            notifPanelClose.addEventListener('click', () => notifPanel.classList.remove('open'));
+            markAllReadBtn?.addEventListener('click', async () => { try { await apiFetch('/api/notifications/read', { method: 'POST', body: JSON.stringify({}) }); loadNotifications(); } catch (err) {} });
+            document.getElementById('sosBtn')?.addEventListener('click', sendSos);
+
+            document.querySelectorAll('.sidebar-nav a[data-section]').forEach(a => {
+                a.addEventListener('click', (e) => { e.preventDefault(); switchSection(a.dataset.section); });
+            });
+
+            mobileMenuBtn.addEventListener('click', () => { sidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('show'); });
+            sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('show'); });
+            window.addEventListener('resize', () => { if (mapInstance) setTimeout(() => mapInstance.invalidateSize(), 100); if (mapFullInstance) setTimeout(() => mapFullInstance.invalidateSize(), 100); });
+
+            // ─── INIT ───
+            async function init() {
+                if (token) await fetchUser();
+                try {
+                    const stops = await apiFetch('/api/stops');
+                    busStops = stops;
+                    populateDropdowns();
+                } catch (err) { console.log('Server not running'); }
+                initMap();
+                if (token) { loadDashboardData(); loadNotifications(); }
+                else loadDashboardData();
+                setInterval(() => {
+                    if (token) {
+                        apiFetch('/api/dashboard/stats').then(stats => updateStatsUI(stats)).catch(() => {});
+                        apiFetch('/api/buses').then(buses => { allBuses = buses; updateBusList(buses); drawBuses(buses); updateCharts(buses); }).catch(() => {});
+                    }
+                }, 10000);
+                console.log('🚍 SmartBus Enterprise System initialized');
+            }
+
+            init();
+
+            window.smartbus = { selectBus: window.selectBus, markNotifRead: window.markNotifRead, switchSection, refresh: () => refreshBtn.click() };
+        })();
+    </script>
+</body>
+</html>
