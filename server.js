@@ -918,21 +918,21 @@ const CHENNAI_BOUNDS = {
 let busStops = [];
 
 // Route-based GPS coordinates for realistic bus movement
+// These match the route names in the database
 const routeCoordinates = {
-  'Anna Nagar - T.Nagar': [
-    { lat: 13.0865, lng: 80.2105 }, // Anna Nagar Tower
-    { lat: 13.07, lng: 80.20 },
-    { lat: 13.05, lng: 80.19 },
-    { lat: 13.0409, lng: 80.2344 }  // T.Nagar
-  ],
-  'Adyar - Tambaram': [
-    { lat: 13.0030, lng: 80.2580 }, // Adyar Depot
-    { lat: 12.98, lng: 80.22 },
-    { lat: 12.95, lng: 80.18 },
+  'Anna - Tambaram': [
+    { lat: 13.0865, lng: 80.2105 }, // Anna Nagar
+    { lat: 13.05, lng: 80.20 },
+    { lat: 12.98, lng: 80.18 },
     { lat: 12.9246, lng: 80.1272 }  // Tambaram
   ],
-  'Central - Velachery': [
-    { lat: 13.0827, lng: 80.2707 }, // Chennai Central
+  'Adyar - Koyambedu': [
+    { lat: 13.0030, lng: 80.2580 }, // Adyar
+    { lat: 13.05, lng: 80.22 },
+    { lat: 13.0710, lng: 80.1830 }  // Koyambedu
+  ],
+  'Chennai - Velachery': [
+    { lat: 13.0827, lng: 80.2707 }, // Central
     { lat: 13.05, lng: 80.25 },
     { lat: 12.98, lng: 80.22 },
     { lat: 12.9751, lng: 80.2181 }  // Velachery
@@ -943,35 +943,84 @@ const routeCoordinates = {
     { lat: 13.0697, lng: 80.2574 }  // Egmore
   ],
   'Guindy - OMR': [
-    { lat: 13.0047, lng: 80.2152 }, // Guindy IIT
+    { lat: 13.0047, lng: 80.2152 }, // Guindy
     { lat: 12.95, lng: 80.20 },
-    { lat: 12.95, lng: 80.23 }  // OMR Navalur
+    { lat: 12.95, lng: 80.23 }  // OMR
   ],
-  'Koyambedu - Broadway': [
-    { lat: 13.0710, lng: 80.1830 }, // Koyambedu
-    { lat: 13.08, lng: 80.24 },
-    { lat: 13.0950, lng: 80.2860 }  // Broadway
+  'Broadway - Mambalam': [
+    { lat: 13.0950, lng: 80.2860 }, // Broadway
+    { lat: 13.05, lng: 80.25 },
+    { lat: 13.0330, lng: 80.2270 }  // Mambalam
   ],
-  'T.Nagar - Velachery': [
+  'T.Nagar - Thiruvanmiyur': [
     { lat: 13.0409, lng: 80.2344 }, // T.Nagar
     { lat: 13.02, lng: 80.22 },
-    { lat: 12.98, lng: 80.22 },
-    { lat: 12.9751, lng: 80.2181 }  // Velachery
-  ],
-  'Adyar - Thiruvanmiyur': [
-    { lat: 13.0030, lng: 80.2580 }, // Adyar
-    { lat: 12.98, lng: 80.24 },
     { lat: 12.9829, lng: 80.2591 }  // Thiruvanmiyur
   ],
-  'Porur - Guindy': [
+  'Porur - Saidapet': [
     { lat: 13.0350, lng: 80.1560 }, // Porur
-    { lat: 13.01, lng: 80.18 },
+    { lat: 13.02, lng: 80.22 },
+    { lat: 13.0213, lng: 80.2206 }  // Saidapet
+  ],
+  'Nungambakkam - Vadapalani': [
+    { lat: 13.0569, lng: 80.2425 }, // Nungambakkam
+    { lat: 13.05, lng: 80.2120 },
+    { lat: 13.0500, lng: 80.2120 }  // Vadapalani
+  ],
+  'K.K. - Ashok': [
+    { lat: 13.0370, lng: 80.2030 }, // K.K. Nagar
+    { lat: 13.04, lng: 80.21 },
+    { lat: 13.0410, lng: 80.2110 }  // Ashok Nagar
+  ],
+  'Chromepet - Guindy': [
+    { lat: 12.9516, lng: 80.1462 }, // Chromepet
+    { lat: 13.0, lng: 80.20 },
     { lat: 13.0047, lng: 80.2152 }  // Guindy
   ],
-  'Central - Saidapet': [
+  'Santhome - Triplicane': [
+    { lat: 13.0280, lng: 80.2780 }, // Santhome
+    { lat: 13.05, lng: 80.27 },
+    { lat: 13.0580, lng: 80.2750 }  // Triplicane
+  ],
+  'Royapettah - Mylapore': [
+    { lat: 13.0550, lng: 80.2670 }, // Royapettah
+    { lat: 13.04, lng: 80.26 },
+    { lat: 13.0349, lng: 80.2681 }  // Mylapore
+  ],
+  'Anna - Koyambedu': [
+    { lat: 13.0865, lng: 80.2105 }, // Anna Nagar
+    { lat: 13.07, lng: 80.20 },
+    { lat: 13.0710, lng: 80.1830 }  // Koyambedu
+  ],
+  'Velachery - Guindy': [
+    { lat: 12.9751, lng: 80.2181 }, // Velachery
+    { lat: 13.0, lng: 80.21 },
+    { lat: 13.0047, lng: 80.2152 }  // Guindy
+  ],
+  'Tambaram - Chromepet': [
+    { lat: 12.9246, lng: 80.1272 }, // Tambaram
+    { lat: 12.95, lng: 80.14 },
+    { lat: 12.9516, lng: 80.1462 }  // Chromepet
+  ],
+  'OMR - Thiruvanmiyur': [
+    { lat: 12.95, lng: 80.23 }, // OMR
+    { lat: 12.98, lng: 80.25 },
+    { lat: 12.9829, lng: 80.2591 }  // Thiruvanmiyur
+  ],
+  'Broadway - Egmore': [
+    { lat: 13.0950, lng: 80.2860 }, // Broadway
+    { lat: 13.07, lng: 80.26 },
+    { lat: 13.0697, lng: 80.2574 }  // Egmore
+  ],
+  'Chennai - Tambaram': [
     { lat: 13.0827, lng: 80.2707 }, // Central
-    { lat: 13.05, lng: 80.25 },
-    { lat: 13.0213, lng: 80.2206 }  // Saidapet
+    { lat: 13.0, lng: 80.20 },
+    { lat: 12.9246, lng: 80.1272 }  // Tambaram
+  ],
+  'Adyar - Anna': [
+    { lat: 13.0030, lng: 80.2580 }, // Adyar
+    { lat: 13.05, lng: 80.22 },
+    { lat: 13.0865, lng: 80.2105 }  // Anna Nagar
   ]
 };
 
