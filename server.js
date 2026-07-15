@@ -857,19 +857,12 @@ function seedDatabase() {
     });
   });
 
-  const busRegs = [
-    'TN-01-NE-0001', 'TN-01-NE-0002', 'TN-01-NE-0003', 'TN-01-NE-0004',
-    'TN-01-NE-0005', 'TN-01-NE-0006', 'TN-01-NE-0007', 'TN-01-NE-0008',
-    'TN-01-NE-0009', 'TN-01-NE-0010', 'TN-01-NE-0011', 'TN-01-NE-0012',
-    'TN-01-NE-0013', 'TN-01-NE-0014', 'TN-01-NE-0015', 'TN-01-NE-0016',
-    'TN-01-NE-0017', 'TN-01-NE-0018', 'TN-01-NE-0019', 'TN-01-NE-0020',
-    'TN-01-NE-0021', 'TN-01-NE-0022', 'TN-01-NE-0023', 'TN-01-NE-0024',
-    'TN-01-NE-0025', 'TN-01-NE-0026', 'TN-01-NE-0027', 'TN-01-NE-0028',
-    'TN-01-NE-0029', 'TN-01-NE-0030', 'TN-01-NE-0031', 'TN-01-NE-0032',
-    'TN-01-NE-0033', 'TN-01-NE-0034', 'TN-01-NE-0035', 'TN-01-NE-0036',
-    'TN-01-NE-0037', 'TN-01-NE-0038', 'TN-01-NE-0039', 'TN-01-NE-0040'
-  ];
-  const drivers = ['Kumar','Suresh','Ramesh','Dinesh','Murugan','Prakash','Vijay','Ganesh','Rajesh','Santhosh','Mohan','Arun','Naveen','Praveen','Lokesh','Kishore','Bala','Karthik','Vignesh','Deepak','Harish','Natarajan','Venkat','Sridhar','Prabhu','Ravi','Sam','Gopi','Mani','Selva','Ashok','Ramu','Babu','Chandru','Durai','Elango','Feroz','Gunaseelan','Irfan','Jagan'];
+  // Generate 200 bus registrations
+  const busRegs = [];
+  for (let i = 1; i <= 200; i++) {
+    busRegs.push(`TN-01-NE-${String(i).padStart(4, '0')}`);
+  }
+  const drivers = ['Kumar','Suresh','Ramesh','Dinesh','Murugan','Prakash','Vijay','Ganesh','Rajesh','Santhosh','Mohan','Arun','Naveen','Praveen','Lokesh','Kishore','Bala','Karthik','Vignesh','Deepak','Harish','Natarajan','Venkat','Sridhar','Prabhu','Ravi','Sam','Gopi','Mani','Selva','Ashok','Ramu','Babu','Chandru','Durai','Elango','Feroz','Gunaseelan','Irfan','Jagan','Priya','Kavin','Divya','Nisha','Ravi','Anand','Kumar','Sneha','Rohit','Amit','Pooja'];
 
   busRegs.forEach((reg, idx) => {
     const id = uuid();
