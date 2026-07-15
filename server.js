@@ -921,9 +921,75 @@ const CHENNAI_BOUNDS = {
   east: 80.35     // Near Perungudi
 };
 
+// Global bus stops array for route simulation
+let busStops = [];
+
+// Route-based GPS coordinates for realistic bus movement
+const routeCoordinates = {
+  'Anna Nagar - T.Nagar': [
+    { lat: 13.0865, lng: 80.2105 }, // Anna Nagar Tower
+    { lat: 13.07, lng: 80.20 },
+    { lat: 13.05, lng: 80.19 },
+    { lat: 13.0409, lng: 80.2344 }  // T.Nagar
+  ],
+  'Adyar - Tambaram': [
+    { lat: 13.0030, lng: 80.2580 }, // Adyar Depot
+    { lat: 12.98, lng: 80.22 },
+    { lat: 12.95, lng: 80.18 },
+    { lat: 12.9246, lng: 80.1272 }  // Tambaram
+  ],
+  'Central - Velachery': [
+    { lat: 13.0827, lng: 80.2707 }, // Chennai Central
+    { lat: 13.05, lng: 80.25 },
+    { lat: 12.98, lng: 80.22 },
+    { lat: 12.9751, lng: 80.2181 }  // Velachery
+  ],
+  'Mylapore - Egmore': [
+    { lat: 13.0349, lng: 80.2681 }, // Mylapore
+    { lat: 13.05, lng: 80.25 },
+    { lat: 13.0697, lng: 80.2574 }  // Egmore
+  ],
+  'Guindy - OMR': [
+    { lat: 13.0047, lng: 80.2152 }, // Guindy IIT
+    { lat: 12.95, lng: 80.20 },
+    { lat: 12.95, lng: 80.23 }  // OMR Navalur
+  ],
+  'Koyambedu - Broadway': [
+    { lat: 13.0710, lng: 80.1830 }, // Koyambedu
+    { lat: 13.08, lng: 80.24 },
+    { lat: 13.0950, lng: 80.2860 }  // Broadway
+  ],
+  'T.Nagar - Velachery': [
+    { lat: 13.0409, lng: 80.2344 }, // T.Nagar
+    { lat: 13.02, lng: 80.22 },
+    { lat: 12.98, lng: 80.22 },
+    { lat: 12.9751, lng: 80.2181 }  // Velachery
+  ],
+  'Adyar - Thiruvanmiyur': [
+    { lat: 13.0030, lng: 80.2580 }, // Adyar
+    { lat: 12.98, lng: 80.24 },
+    { lat: 12.9829, lng: 80.2591 }  // Thiruvanmiyur
+  ],
+  'Porur - Guindy': [
+    { lat: 13.0350, lng: 80.1560 }, // Porur
+    { lat: 13.01, lng: 80.18 },
+    { lat: 13.0047, lng: 80.2152 }  // Guindy
+  ],
+  'Central - Saidapet': [
+    { lat: 13.0827, lng: 80.2707 }, // Central
+    { lat: 13.05, lng: 80.25 },
+    { lat: 13.0213, lng: 80.2206 }  // Saidapet
+  ]
+};
+
+// Track bus position along route
+const busRouteProgress = {};
+
 // ─── LIVE SIMULATION ───
 function simulateLiveUpdates() {
   try {
+    // Load stops from database for next stop lookup
+    const stops = stmts.getAllStops.all();
     const buses = stmts.getAllBuses.all();
     buses.forEach(bus => {
       const delta = randInt(-4, 5);
@@ -934,22 +1000,65 @@ function simulateLiveUpdates() {
       const eta = Math.max(1, (bus.eta_minutes || 5) + randInt(-1, 2));
       const seatsAvail = Math.max(0, CAPACITY - newPax);
       
-      // Keep buses within Chennai bounds - smaller movement
-      const latDelta = rand(-0.001, 0.001), lngDelta = rand(-0.001, 0.001);
-      const newLat = clamp((bus.current_lat || 13.08) + latDelta, CHENNAI_BOUNDS.south, CHENNAI_BOUNDS.north);
-      const newLng = clamp((bus.current_lng || 80.27) + lngDelta, CHENNAI_BOUNDS.west, CHENNAI_BOUNDS.east);
+      // Get route coordinates for this bus
+      const routeName = bus.route_name || 'Anna Nagar - T.Nagar';
+      const routeCoords = routeCoordinates[routeName] || routeCoordinates['Anna Nagar - T.Nagar'];
+      
+      // Initialize or advance position along route
+      if (!busRouteProgress[bus.id]) {
+        busRouteProgress[bus.id] = { index: 0, direction: 1 };
+      }
+      
+      const progress = busRouteProgress[bus.id];
+      const routeIndex = progress.index;
+      
+      // Move to next point on route
+      if (routeCoords && routeCoords.length > 0) {
+        const targetPoint = routeCoords[routeIndex];
+        const newLat = targetPoint.lat;
+        const newLng = targetPoint.lng;
+        
+        // Advance to next point (or reverse at endpoints)
+        if (routeIndex >= routeCoords.length - 1) {
+          progress.direction = -1;
+        } else if (routeIndex <= 0) {
+          progress.direction = 1;
+        }
+        progress.index += progress.direction;
+        
+        // Update next stop based on position
+        const nextStopIndex = Math.min(routeIndex + progress.direction, routeCoords.length - 1);
+        const nextStop = stops.find(s => s.lat === routeCoords[nextStopIndex]?.lat && s.lng === routeCoords[nextStopIndex]?.lng);
+        
+        stmts.updateBusCrowd.run(status, Math.round(newPax), wait, eta, nextStop?.name || bus.next_stop || '', seatsAvail, bus.id);
+        stmts.updateBusLocation.run(newLat, newLng, rand(20, 45), randInt(0, 359), bus.id);
+        stmts.insertGpsLog.run(bus.id, newLat, newLng, rand(20, 45), randInt(0, 359), Math.round(newPax), status);
 
-      stmts.updateBusCrowd.run(status, Math.round(newPax), wait, eta, bus.next_stop || '', seatsAvail, bus.id);
-      stmts.updateBusLocation.run(newLat, newLng, rand(5, 50), randInt(0, 359), bus.id);
-      stmts.insertGpsLog.run(bus.id, newLat, newLng, rand(5, 50), randInt(0, 359), Math.round(newPax), status);
+        const prediction = predictCrowdAdvanced(bus.id, Math.round(newPax));
+        io.to(`bus-${bus.id}`).emit('bus-location', {
+          busId: bus.id, lat: newLat, lng: newLng, crowdLevel: status,
+          passengers: Math.round(newPax), seatsAvailable: seatsAvail,
+          waitTime: wait, etaMinutes: eta, nextStop: nextStop?.name || bus.next_stop, prediction,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Fallback to random movement within bounds
+        const latDelta = rand(-0.0005, 0.0005), lngDelta = rand(-0.0005, 0.0005);
+        const newLat = clamp((bus.current_lat || 13.08) + latDelta, CHENNAI_BOUNDS.south, CHENNAI_BOUNDS.north);
+        const newLng = clamp((bus.current_lng || 80.27) + lngDelta, CHENNAI_BOUNDS.west, CHENNAI_BOUNDS.east);
 
-      const prediction = predictCrowdAdvanced(bus.id, Math.round(newPax));
-      io.to(`bus-${bus.id}`).emit('bus-location', {
-        busId: bus.id, lat: newLat, lng: newLng, crowdLevel: status,
-        passengers: Math.round(newPax), seatsAvailable: seatsAvail,
-        waitTime: wait, etaMinutes: eta, nextStop: bus.next_stop, prediction,
-        timestamp: new Date().toISOString()
-      });
+        stmts.updateBusCrowd.run(status, Math.round(newPax), wait, eta, bus.next_stop || '', seatsAvail, bus.id);
+        stmts.updateBusLocation.run(newLat, newLng, rand(20, 45), randInt(0, 359), bus.id);
+        stmts.insertGpsLog.run(bus.id, newLat, newLng, rand(20, 45), randInt(0, 359), Math.round(newPax), status);
+
+        const prediction = predictCrowdAdvanced(bus.id, Math.round(newPax));
+        io.to(`bus-${bus.id}`).emit('bus-location', {
+          busId: bus.id, lat: newLat, lng: newLng, crowdLevel: status,
+          passengers: Math.round(newPax), seatsAvailable: seatsAvail,
+          waitTime: wait, etaMinutes: eta, nextStop: bus.next_stop, prediction,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
   } catch (err) { console.error('Sim error:', err.message); }
 }
