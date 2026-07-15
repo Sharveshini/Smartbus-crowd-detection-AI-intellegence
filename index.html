@@ -677,7 +677,7 @@
         .ai-insight .ai-text { flex: 1; color: var(--text); }
         .ai-insight .ai-text strong { color: #6d28d9; }
 
-        /* ─── MAP MARKERS – OUTSTANDING BUS ICON ─── */
+        /* ─── MAP MARKERS – CLEAN PROFESSIONAL BUS ICONS ─── */
         .bus-marker {
             background: transparent !important;
             border: none !important;
@@ -686,46 +686,39 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 44px;
-            height: 44px;
+            width: 26px;
+            height: 26px;
             border-radius: 50%;
-            border: 3px solid rgba(255,255,255,0.95);
-            box-shadow: 0 0 0 4px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.25);
-            font-size: 18px;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            font-size: 12px;
             color: #fff;
             transition: 0.2s;
-            position: relative;
-            animation: busPulse 2s infinite;
         }
-        .bus-marker div::after {
-            content: '';
-            position: absolute;
-            top: -6px;
-            left: -6px;
-            right: -6px;
-            bottom: -6px;
+        .bus-marker.high div { background: #ef4444; }
+        .bus-marker.medium div { background: #f59e0b; }
+        .bus-marker.low div { background: #10b981; }
+        .bus-marker.special div { background: #8b5cf6; }
+        
+        /* Bus marker clustering */
+        .bus-cluster {
+            background: transparent !important;
+            border: none !important;
+        }
+        .bus-cluster div {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
-            background: inherit;
-            opacity: 0.3;
-            z-index: -1;
-            filter: blur(4px);
-            animation: busGlow 2s infinite;
+            background: var(--primary);
+            border: 2px solid #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            font-size: 11px;
+            color: #fff;
+            font-weight: 700;
         }
-        @keyframes busPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
-        }
-        @keyframes busGlow {
-            0%, 100% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.2); }
-        }
-        .bus-marker div i {
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-        }
-        .bus-marker.high div { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        .bus-marker.medium div { background: linear-gradient(135deg, #f59e0b, #d97706); }
-        .bus-marker.low div { background: linear-gradient(135deg, #10b981, #059669); }
-        .bus-marker.special div { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
 
         /* ─── OTHER MARKERS ─── */
         .stop-marker { background: transparent !important; border: none !important; }
@@ -1812,14 +1805,14 @@
                 setTimeout(() => digitalTwinMap.invalidateSize(), 300);
             }
 
-            // ─── ENHANCED BUS ICON ───
+            // ─── CLEAN BUS ICON (26px) ───
             function createBusIcon(status) {
                 return L.divIcon({
                     className: `bus-marker ${status}`,
                     html: `<div><i class="fas fa-bus"></i></div>`,
-                    iconSize: [44, 44],
-                    iconAnchor: [22, 22],
-                    popupAnchor: [0, -22]
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13],
+                    popupAnchor: [0, -13]
                 });
             }
 
