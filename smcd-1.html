@@ -1412,30 +1412,49 @@
                 }, 14000);
             }
 
-            // ─── PLANNER ───
+// ─── PLANNER ───
             async function planJourney(fromId, toId, resultEl, legsEl, summaryEl, altEl) {
                 if (!fromId || !toId || fromId === toId) { resultEl.classList.remove('active'); resultEl.style.display = 'none'; return; }
                 try {
                     const data = await apiFetch('/api/plan', { method: 'POST', body: JSON.stringify({ fromStopId: fromId, toStopId: toId }) });
                     const fromStop = busStops.find(s => s.id === fromId);
                     const toStop = busStops.find(s => s.id === toId);
+                    
+                    // Handle new multi-suggestion format
+                    if (data && data.suggestions && data.suggestions.length > 0) {
+                        const suggestion = data.suggestions[0]; // Use first (best) suggestion
+                        let legsHtml = '';
+                        (suggestion.legs || []).forEach((leg, idx) => {
+                            legsHtml += `<div class="leg"><span class="route-badge">${leg.routeNumber || leg.routeName || 'R'+(idx+1)}</span><span class="stop-name">${leg.fromStop || 'Start'}</span><span class="arrow"><i class="fas fa-arrow-right"></i></span><span class="stop-name">${leg.toStop || 'End'}</span><span style="color:var(--text-muted);font-size:0.65rem;margin-left:auto;">${leg.duration || '?'} min</span></div>`;
+                        });
+                        const totalMin = suggestion.totalTime || 0;
+                        const totalFare = suggestion.totalFare || 0;
+                        const transfers = suggestion.transfers || 0;
+                        legsEl.innerHTML = legsHtml;
+                        summaryEl.innerHTML = `<span><strong>⏱️ ${totalMin} min</strong></span><span><i class="fas fa-exchange-alt"></i> ${transfers} transfer${transfers!==1?'s':''}</span><span><i class="fas fa-walking"></i> ~${Math.round(totalMin*0.08)} min walk</span><span><i class="fas fa-rupee-sign"></i> ₹${totalFare}</span>`;
+                        resultEl.classList.add('active');
+                        resultEl.style.display = 'block';
+                        if (altEl) altEl.style.display = 'none';
+                        addActivity('route', 'Route Planned', `${fromStop?.name||'Start'} → ${toStop?.name||'End'} · ${totalMin} min · ₹${totalFare}`);
+                        return;
+                    }
+                    
+                    // Handle old format or no suggestions
                     let legsHtml = '';
-                    (data.primary?.legs || []).forEach((leg, idx) => {
-                        legsHtml += `<div class="leg"><span class="route-badge">${leg.routeName || 'R'+(idx+1)}</span><span class="stop-name">${leg.fromStopName || 'Start'}</span><span class="arrow"><i class="fas fa-arrow-right"></i></span><span class="stop-name">${leg.toStopName || 'End'}</span><span style="color:var(--text-muted);font-size:0.65rem;margin-left:auto;">${leg.duration || '?'} min</span></div>`;
+                    (data.legs || []).forEach((leg, idx) => {
+                        legsHtml += `<div class="leg"><span class="route-badge">${leg.routeNumber || leg.routeName || 'R'+(idx+1)}</span><span class="stop-name">${leg.fromStop || 'Start'}</span><span class="arrow"><i class="fas fa-arrow-right"></i></span><span class="stop-name">${leg.toStop || 'End'}</span><span style="color:var(--text-muted);font-size:0.65rem;margin-left:auto;">${leg.duration || '?'} min</span></div>`;
                     });
-                    const totalMin = data.primary?.totalTime || 0;
-                    const totalFare = data.primary?.totalFare || 0;
-                    const transfers = data.primary?.transfers || 0;
+                    const totalMin = data.totalTime || 0;
+                    const totalFare = data.totalFare || 0;
+                    const transfers = data.transfers || 0;
                     legsEl.innerHTML = legsHtml;
                     summaryEl.innerHTML = `<span><strong>⏱️ ${totalMin} min</strong></span><span><i class="fas fa-exchange-alt"></i> ${transfers} transfer${transfers!==1?'s':''}</span><span><i class="fas fa-walking"></i> ~${Math.round(totalMin*0.08)} min walk</span><span><i class="fas fa-rupee-sign"></i> ₹${totalFare}</span>`;
                     resultEl.classList.add('active');
                     resultEl.style.display = 'block';
 
-                    if (data.alternate && altEl) {
-                        const altTime = data.alternate.totalTime || 0;
-                        const altFare = data.alternate.totalFare || 0;
+                    if (data.message && altEl) {
                         altEl.style.display = 'block';
-                        altEl.innerHTML = `<i class="fas fa-route"></i> <strong>Alternate Route Available:</strong> ${altTime} min · ₹${altFare} · ${data.alternate.transfers} transfer(s) — less crowded option`;
+                        altEl.innerHTML = `<i class="fas fa-info-circle"></i> ${data.message}`;
                     } else if (altEl) { altEl.style.display = 'none'; }
 
                     addActivity('route', 'Route Planned', `${fromStop?.name||'Start'} → ${toStop?.name||'End'} · ${totalMin} min · ₹${totalFare}`);

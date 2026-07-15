@@ -149,6 +149,18 @@ db.exec(`
     type TEXT, title TEXT, body TEXT, is_read INTEGER DEFAULT 0,
     data TEXT, action_url TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id),
+    trip_id TEXT, fare REAL, method TEXT, qr_code TEXT,
+    status TEXT DEFAULT 'active', created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS passes (
+    id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id),
+    type TEXT, valid_from TEXT, valid_to TEXT,
+    status TEXT DEFAULT 'active', created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // ================================================================
@@ -211,6 +223,18 @@ function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
 function getLevel(p) { if (p > 44) return 'high'; if (p > 24) return 'medium'; return 'low'; }
+
+// Haversine distance calculation
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
 
 // ─── AI PREDICTION (simplified for speed) ───
 function predictCrowdAdvanced(busId, currentPax) {
@@ -310,6 +334,199 @@ app.get('/api/favorites', authMiddleware, (req, res) => {
   res.json([]); // placeholder, you can implement real favorites
 });
 
+// Journey Planning - Multi-bus suggestions
+app.post('/api/plan', (req, res) => {
+  try {
+    const { fromStopId, toStopId, criteria } = req.body;
+    if (!fromStopId || !toStopId) return res.status(400).json({ error: 'From and To stops required' });
+    
+    const fromStop = stmts.getStopById.get(fromStopId);
+    const toStop = stmts.getStopById.get(toStopId);
+    
+    if (!fromStop || !toStop) return res.status(404).json({ error: 'Stop not found' });
+    
+    // Get all routes and find direct or connecting routes
+    const routes = stmts.getAllRoutes.all();
+    const suggestions = [];
+    
+    // Find direct routes
+    const directRoutes = routes.filter(r => {
+      const routeStops = stmts.getRouteStops.all(r.id);
+      const stopIds = routeStops.map(rs => rs.stop_id);
+      return stopIds.includes(fromStopId) && stopIds.includes(toStopId);
+    });
+    
+    // Find routes that start from or near fromStop
+    const fromRoutes = routes.filter(r => {
+      const routeStops = stmts.getRouteStops.all(r.id);
+      return routeStops.some(rs => rs.stop_id === fromStopId);
+    }).slice(0, 5);
+    
+    // Find routes that go to or near toStop
+    const toRoutes = routes.filter(r => {
+      const routeStops = stmts.getRouteStops.all(r.id);
+      return routeStops.some(rs => rs.stop_id === toStopId);
+    }).slice(0, 5);
+    
+    // Find connecting routes (fromStop -> intermediate -> toStop)
+    const connectingRoutes = [];
+    fromRoutes.forEach(fromRoute => {
+      const fromRouteStops = stmts.getRouteStops.all(fromRoute.id);
+      const fromRouteStopIds = fromRouteStops.map(rs => rs.stop_id);
+      
+      toRoutes.forEach(toRoute => {
+        const toRouteStops = stmts.getRouteStops.all(toRoute.id);
+        const toRouteStopIds = toRouteStops.map(rs => rs.stop_id);
+        
+        // Find common stops (transfer points)
+        const transferPoints = fromRouteStopIds.filter(id => toRouteStopIds.includes(id));
+        if (transferPoints.length > 0 && fromRoute.id !== toRoute.id) {
+          connectingRoutes.push({
+            fromRoute,
+            toRoute,
+            transferPoint: transferPoints[0]
+          });
+        }
+      });
+    });
+    
+    // Build suggestions
+    if (directRoutes.length > 0) {
+      const route = directRoutes[0];
+      const routeStops = stmts.getRouteStops.all(route.id);
+      const fromIdx = routeStops.findIndex(rs => rs.stop_id === fromStopId);
+      const toIdx = routeStops.findIndex(rs => rs.stop_id === toStopId);
+      
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const startIdx = Math.min(fromIdx, toIdx);
+        const endIdx = Math.max(fromIdx, toIdx);
+        const legs = [];
+        
+        for (let i = startIdx; i <= endIdx; i++) {
+          const rs = routeStops[i];
+          const prevStop = i > startIdx ? routeStops[i - 1] : null;
+          
+          legs.push({
+            routeName: route.name,
+            routeNumber: route.number,
+            fromStop: prevStop ? prevStop.stop_name : fromStop.name,
+            toStop: rs.stop_name,
+            duration: prevStop ? (rs.time_from_prev_min || 2) : 0,
+            fare: route.fare_base || 20
+          });
+        }
+        
+        suggestions.push({
+          type: 'direct',
+          label: '🚌 Direct Route',
+          legs,
+          totalTime: legs.reduce((s, l) => s + l.duration, 0),
+          totalFare: legs.length > 0 ? legs[0].fare : 0,
+          transfers: 0,
+          crowdLevel: pick(['low', 'medium', 'low']), // Simulated
+          busesAvailable: randInt(3, 8)
+        });
+      }
+    }
+    
+    // Add connecting route suggestions
+    connectingRoutes.slice(0, 3).forEach((conn, idx) => {
+      const fromRouteStops = stmts.getRouteStops.all(conn.fromRoute.id);
+      const toRouteStops = stmts.getRouteStops.all(conn.toRoute.id);
+      const transferStop = stmts.getStopById.get(conn.transferPoint);
+      
+      const fromIdx = fromRouteStops.findIndex(rs => rs.stop_id === fromStopId);
+      const transferIdx = fromRouteStops.findIndex(rs => rs.stop_id === conn.transferPoint);
+      const toTransferIdx = toRouteStops.findIndex(rs => rs.stop_id === conn.transferPoint);
+      const toIdx = toRouteStops.findIndex(rs => rs.stop_id === toStopId);
+      
+      if (fromIdx !== -1 && transferIdx !== -1 && toTransferIdx !== -1 && toIdx !== -1) {
+        const leg1 = [];
+        const start1 = Math.min(fromIdx, transferIdx);
+        const end1 = Math.max(fromIdx, transferIdx);
+        
+        for (let i = start1; i <= end1; i++) {
+          const rs = fromRouteStops[i];
+          const prevStop = i > start1 ? fromRouteStops[i - 1] : null;
+          leg1.push({
+            routeName: conn.fromRoute.name,
+            routeNumber: conn.fromRoute.number,
+            fromStop: prevStop ? prevStop.stop_name : fromStop.name,
+            toStop: rs.stop_name,
+            duration: prevStop ? (rs.time_from_prev_min || 2) : 0,
+            fare: conn.fromRoute.fare_base || 20
+          });
+        }
+        
+        const leg2 = [];
+        const start2 = Math.min(toTransferIdx, toIdx);
+        const end2 = Math.max(toTransferIdx, toIdx);
+        
+        for (let i = start2; i <= end2; i++) {
+          const rs = toRouteStops[i];
+          const prevStop = i > start2 ? toRouteStops[i - 1] : null;
+          leg2.push({
+            routeName: conn.toRoute.name,
+            routeNumber: conn.toRoute.number,
+            fromStop: prevStop ? prevStop.stop_name : (transferStop?.name || 'Transfer'),
+            toStop: rs.stop_name,
+            duration: prevStop ? (rs.time_from_prev_min || 2) : 0,
+            fare: conn.toRoute.fare_base || 20
+          });
+        }
+        
+        const totalTime = [...leg1, ...leg2].reduce((s, l) => s + l.duration, 0);
+        const totalFare = (leg1[0]?.fare || 0) + (leg2[0]?.fare || 0);
+        
+        suggestions.push({
+          type: 'connecting',
+          label: `🔄 Option ${idx + 2}: Via ${transferStop?.name || 'Transfer Point'}`,
+          legs: [...leg1, ...leg2],
+          totalTime,
+          totalFare,
+          transfers: 1,
+          crowdLevel: pick(['low', 'medium', 'low']),
+          busesAvailable: randInt(2, 5)
+        });
+      }
+    });
+    
+    // If no suggestions found, provide alternative analysis
+    if (suggestions.length === 0) {
+      // Find nearest busy routes
+      const nearbyRoutes = routes.slice(0, 3).map(r => ({
+        name: r.name,
+        number: r.number,
+        fare: r.fare_base || 20,
+        duration: r.duration_min || 30
+      }));
+      
+      return res.json({
+        suggestions: [],
+        alternatives: nearbyRoutes,
+        message: 'No direct route found between these stops.',
+        suggestion: 'Try using nearby bus stops or check the Live Map for available buses.'
+      });
+    }
+    
+    // Sort suggestions by criteria
+    if (criteria === 'fastest') {
+      suggestions.sort((a, b) => a.totalTime - b.totalTime);
+    } else if (criteria === 'cheapest') {
+      suggestions.sort((a, b) => a.totalFare - b.totalFare);
+    } else if (criteria === 'least_crowded') {
+      suggestions.sort((a, b) => {
+        const order = { low: 0, medium: 1, high: 2 };
+        return (order[a.crowdLevel] || 1) - (order[b.crowdLevel] || 1);
+      });
+    }
+    
+    res.json({ suggestions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Trips
 app.get('/api/trips', authMiddleware, (req, res) => {
   res.json(stmts.getTripsByUser.all(req.user.id));
@@ -326,6 +543,39 @@ app.post('/api/trips', authMiddleware, (req, res) => {
   res.json({ success: true, id, pointsEarned: points });
 });
 
+// Tickets
+app.get('/api/tickets', authMiddleware, (req, res) => {
+  const tickets = db.prepare('SELECT * FROM tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT 20').all(req.user.id);
+  res.json(tickets);
+});
+app.post('/api/tickets', authMiddleware, (req, res) => {
+  const { tripId, fare, method } = req.body;
+  const id = uuid();
+  const qrCode = 'TKT' + Math.random().toString(36).substr(2, 6).toUpperCase();
+  db.prepare('INSERT INTO tickets (id, user_id, trip_id, fare, method, qr_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, req.user.id, tripId, fare || 20, method || 'upi', qrCode, 'active', new Date().toISOString());
+  res.json({ success: true, id, qrCode });
+});
+
+// Passes
+app.get('/api/passes', authMiddleware, (req, res) => {
+  const passes = db.prepare('SELECT * FROM passes WHERE user_id = ? AND status = ? ORDER BY created_at DESC').all(req.user.id, 'active');
+  res.json(passes);
+});
+app.post('/api/passes', authMiddleware, (req, res) => {
+  const { type, validFrom, validTo } = req.body;
+  const id = uuid();
+  db.prepare('INSERT INTO passes (id, user_id, type, valid_from, valid_to, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, req.user.id, type || 'weekly', validFrom || new Date().toISOString(), validTo || new Date(Date.now() + 7 * 86400000).toISOString(), 'active', new Date().toISOString());
+  res.json({ success: true, id });
+});
+
+// Rewards
+app.get('/api/rewards', authMiddleware, (req, res) => {
+  const user = stmts.getUserById.get(req.user.id);
+  res.json({ points: user?.total_reward_points || 0 });
+});
+
 // Safety SOS
 app.post('/api/safety/sos', authMiddleware, (req, res) => {
   const { busId, lat, lng, message } = req.body;
@@ -339,6 +589,113 @@ app.post('/api/safety/sos', authMiddleware, (req, res) => {
       `User ${req.user.id} needs immediate help!`, JSON.stringify({ sosId: id }), '/admin');
   });
   res.json({ success: true, sosId: id });
+});
+
+// Metro
+app.get('/api/metro', (req, res) => {
+  const metro = db.prepare('SELECT * FROM stops WHERE zone = ? OR landmark LIKE ? LIMIT 10').all('central', '%metro%');
+  res.json(metro);
+});
+
+// Landmarks
+app.get('/api/landmarks', (req, res) => {
+  const landmarks = db.prepare("SELECT id, name, lat, lng, 'heritage' as category FROM stops WHERE is_terminal = 1 OR landmark IS NOT NULL LIMIT 15").all();
+  res.json(landmarks);
+});
+
+// Parking
+app.get('/api/parking', (req, res) => {
+  res.json([]); // placeholder
+});
+
+// EV Stations
+app.get('/api/ev', (req, res) => {
+  res.json([]); // placeholder
+});
+
+// Emergency Points
+app.get('/api/emergency', (req, res) => {
+  const emergency = db.prepare("SELECT id, name, lat, lng, 'hospital' as type, '044-2447' as phone FROM stops WHERE is_terminal = 1 LIMIT 5").all();
+  res.json(emergency);
+});
+
+// Admin Stats
+app.get('/api/admin/stats', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  const buses = stmts.getAllBuses.all();
+  const total = buses.length;
+  const totalPax = buses.reduce((s, b) => s + (b.passengers_count || 0), 0);
+  const avgPct = total > 0 ? Math.round((totalPax / (total * CAPACITY)) * 100) : 0;
+  const highCount = buses.filter(b => b.crowd_level === 'high').length;
+  const avgWait = total > 0 ? Math.round(buses.reduce((s, b) => s + (b.wait_time || 5), 0) / total) : 0;
+  res.json({
+    revenue: randInt(1000, 5000),
+    avgHealth: randInt(85, 98),
+    highCrowd: highCount,
+    avgWait: avgWait
+  });
+});
+
+// Community Reports
+app.get('/api/community/reports', (req, res) => {
+  const reports = stmts.getCommunityReports.all();
+  res.json(reports);
+});
+
+// Digital Twin - GET and POST endpoints
+app.get('/api/digitaltwin', (req, res) => {
+  const buses = stmts.getAllBuses.all();
+  const data = {
+    buses: buses.map(b => ({
+      id: b.id,
+      lat: b.current_lat,
+      lng: b.current_lng,
+      crowd: b.crowd_level,
+      pax: b.passengers_count
+    }))
+  };
+  res.json(data);
+});
+
+app.post('/api/digitaltwin', (req, res) => {
+  // Accept simulation data and update bus positions
+  const { buses } = req.body;
+  if (buses && Array.isArray(buses)) {
+    buses.forEach(b => {
+      if (b.id) {
+        stmts.updateBusLocation.run(b.lat, b.lng, rand(10, 50), randInt(0, 359), b.id);
+      }
+    });
+  }
+  res.json({ success: true, message: 'Digital Twin simulation updated' });
+});
+
+// SOS endpoint (for smcd-1.html compatibility)
+app.post('/api/sos', authMiddleware, (req, res) => {
+  const { busId, lat, lng, message } = req.body;
+  const id = uuid();
+  // Make busId optional - use null if not provided or invalid
+  const validBusId = busId && busId !== 'test-bus' ? busId : null;
+  stmts.createSos.run(id, req.user.id, validBusId, lat, lng, message || '🚨 EMERGENCY! Help needed!', 'sos_emergency');
+  // Alert admin
+  const admins = db.prepare("SELECT id FROM users WHERE role = 'admin'").all();
+  admins.forEach(a => {
+    const nid = uuid();
+    stmts.createNotification.run(nid, a.id, 'sos_alert', '🚨 SOS Emergency Alert!',
+      `User ${req.user.id} needs immediate help! Location: ${lat},${lng}`, JSON.stringify({ sosId: id }), '/admin');
+  });
+  res.json({ success: true, sosId: id, message: '🚨 SOS sent! Help is on the way.' });
+});
+
+// Favorites endpoint
+app.get('/api/favorites', authMiddleware, (req, res) => {
+  res.json([]); // placeholder for favorites
+});
+
+// Trip History endpoint
+app.get('/api/trip-history', authMiddleware, (req, res) => {
+  const trips = stmts.getTripsByUser.all(req.user.id);
+  res.json(trips);
 });
 
 // Dashboard stats
@@ -434,6 +791,16 @@ function seedDatabase() {
     { name: 'Thiruvanmiyur Beach', ta: 'திருவான்மியூர் கடற்கரை', lat: 12.9829, lng: 80.2591, zone: 'south', landmark: 'Thiruvanmiyur Signal' },
     { name: 'Porur Junction', ta: 'போரூர் சந்திப்பு', lat: 13.0350, lng: 80.1560, zone: 'west', landmark: 'Porur Signal' },
     { name: 'Saidapet Bridge', ta: 'சைதாப்பேட்டை பாலம்', lat: 13.0213, lng: 80.2206, zone: 'central', landmark: 'Saidapet Court' },
+    { name: 'Nungambakkam', ta: 'நுங்கம்பாக்கம்', lat: 13.0569, lng: 80.2425, zone: 'central', landmark: 'Nungambakkam High Road' },
+    { name: 'Adyar Guindy', ta: 'அடையார் கிண்டி', lat: 13.0105, lng: 80.2205, zone: 'south', landmark: 'Adyar Signal' },
+    { name: 'Chromepet', ta: 'குரோம்பேட்', lat: 12.9516, lng: 80.1462, zone: 'south', landmark: 'Chromepet Market' },
+    { name: 'Vadapalani', ta: 'வடபழனி', lat: 13.0500, lng: 80.2120, zone: 'central', landmark: 'Vadapalani Temple' },
+    { name: 'K.K. Nagar', ta: 'கே.கே. நகர்', lat: 13.0370, lng: 80.2030, zone: 'west', landmark: 'K.K. Nagar Market' },
+    { name: 'Ashok Nagar', ta: 'அசோக் நகர்', lat: 13.0410, lng: 80.2110, zone: 'west', landmark: 'Ashok Nagar Colony' },
+    { name: 'Mambalam', ta: 'மாம்பாளம்', lat: 13.0330, lng: 80.2270, zone: 'central', landmark: 'Mambalam Station' },
+    { name: 'Santhome', ta: 'சாந்தோம்', lat: 13.0280, lng: 80.2780, zone: 'central', landmark: 'Santhome Church' },
+    { name: 'Triplicane', ta: 'திரplicane', lat: 13.0580, lng: 80.2750, zone: 'central', landmark: 'Triplicane High Road' },
+    { name: 'Royapettah', ta: 'ராயபேட்டை', lat: 13.0550, lng: 80.2670, zone: 'central', landmark: 'Royapettah Hospital' },
   ];
 
   const stopIds = [];
@@ -456,6 +823,14 @@ function seedDatabase() {
     { name: 'Central - Saidapet', num: '23A', base: 16, start: 4, end: 14, dur: 18, freq: 8, safe: 4.7 },
     { name: 'Broadway - Mylapore', num: '38C', base: 20, start: 11, end: 6, dur: 22, freq: 10, safe: 4.8 },
     { name: 'OMR - Thiruvanmiyur', num: '56K', base: 15, start: 10, end: 12, dur: 12, freq: 15, safe: 4.5 },
+    { name: 'Nungambakkam - Vadapalani', num: '15G', base: 18, start: 15, end: 18, dur: 20, freq: 12, safe: 4.6 },
+    { name: 'K.K. Nagar - Ashok Nagar', num: '52B', base: 14, start: 19, end: 20, dur: 15, freq: 10, safe: 4.7 },
+    { name: 'Chromepet - Tambaram', num: '62A', base: 12, start: 17, end: 3, dur: 18, freq: 8, safe: 4.5 },
+    { name: 'Mambalam - T.Nagar', num: '33D', base: 10, start: 21, end: 1, dur: 10, freq: 15, safe: 4.8 },
+    { name: 'Santhome - Triplicane', num: '8B', base: 12, start: 22, end: 23, dur: 12, freq: 12, safe: 4.9 },
+    { name: 'Royapettah - Mylapore', num: '25A', base: 14, start: 24, end: 6, dur: 14, freq: 10, safe: 4.6 },
+    { name: 'Anna Nagar - Koyambedu', num: '41B', base: 16, start: 0, end: 9, dur: 18, freq: 10, safe: 4.7 },
+    { name: 'Velachery - Guindy', num: '21B', base: 18, start: 5, end: 8, dur: 20, freq: 12, safe: 4.8 },
   ];
 
   routeData.forEach((rd, idx) => {
@@ -486,9 +861,15 @@ function seedDatabase() {
     'TN-01-NE-0001', 'TN-01-NE-0002', 'TN-01-NE-0003', 'TN-01-NE-0004',
     'TN-01-NE-0005', 'TN-01-NE-0006', 'TN-01-NE-0007', 'TN-01-NE-0008',
     'TN-01-NE-0009', 'TN-01-NE-0010', 'TN-01-NE-0011', 'TN-01-NE-0012',
-    'TN-01-NE-0013', 'TN-01-NE-0014', 'TN-01-NE-0015', 'TN-01-NE-0016'
+    'TN-01-NE-0013', 'TN-01-NE-0014', 'TN-01-NE-0015', 'TN-01-NE-0016',
+    'TN-01-NE-0017', 'TN-01-NE-0018', 'TN-01-NE-0019', 'TN-01-NE-0020',
+    'TN-01-NE-0021', 'TN-01-NE-0022', 'TN-01-NE-0023', 'TN-01-NE-0024',
+    'TN-01-NE-0025', 'TN-01-NE-0026', 'TN-01-NE-0027', 'TN-01-NE-0028',
+    'TN-01-NE-0029', 'TN-01-NE-0030', 'TN-01-NE-0031', 'TN-01-NE-0032',
+    'TN-01-NE-0033', 'TN-01-NE-0034', 'TN-01-NE-0035', 'TN-01-NE-0036',
+    'TN-01-NE-0037', 'TN-01-NE-0038', 'TN-01-NE-0039', 'TN-01-NE-0040'
   ];
-  const drivers = ['Kumar','Suresh','Ramesh','Dinesh','Murugan','Prakash','Vijay','Ganesh','Rajesh','Santhosh','Mohan','Arun','Naveen','Praveen','Lokesh','Kishore'];
+  const drivers = ['Kumar','Suresh','Ramesh','Dinesh','Murugan','Prakash','Vijay','Ganesh','Rajesh','Santhosh','Mohan','Arun','Naveen','Praveen','Lokesh','Kishore','Bala','Karthik','Vignesh','Deepak','Harish','Natarajan','Venkat','Sridhar','Prabhu','Ravi','Sam','Gopi','Mani','Selva','Ashok','Ramu','Babu','Chandru','Durai','Elango','Feroz','Gunaseelan','Irfan','Jagan'];
 
   busRegs.forEach((reg, idx) => {
     const id = uuid();
@@ -496,17 +877,19 @@ function seedDatabase() {
     const level = getLevel(pax);
     const wait = randInt(2, 15);
     const eta = randInt(3, 25);
-    const startStop = pick(stopIds);
-    const endStop = pick(stopIds.filter(s => s.id !== startStop.id));
-    const routeName = `${startStop.name} → ${endStop.name}`;
-    const nextStop = pick(stopIds.filter(s => s.id !== startStop.id));
+    const routeIdx = idx % routeData.length;
+    const route = routeData[routeIdx];
+    const startStop = stopIds[route.start];
+    const endStop = stopIds[route.end];
+    const routeName = route.name;
+    const nextStop = pick(stopIds.filter(s => s.id !== startStop.id && s.id !== endStop.id));
     const seatsAvail = Math.max(0, CAPACITY - pax);
 
-    stmts.createBus.run(id, reg, 60, idx % 3 === 0 ? 'AC Volvo' : 'Standard');
-    stmts.updateBusCrowd.run(level, pax, wait, eta, nextStop.name, seatsAvail, id);
-    stmts.updateBusLocation.run(startStop.lat + rand(-0.03, 0.03), startStop.lng + rand(-0.03, 0.03), rand(10, 50), randInt(0, 359), id);
-    db.prepare('UPDATE buses SET route_name = ?, driver_name = ?, conductor_name = ?, ac_available = ?, women_reserved = ?, fuel_level = ? WHERE id = ?')
-      .run(routeName, drivers[idx], `Conductor ${idx+1}`, idx % 3 === 0 ? 1 : 0, 8, rand(40, 95), id);
+    stmts.createBus.run(id, reg, 60, idx % 4 === 0 ? 'AC Volvo' : idx % 4 === 1 ? 'AC Standard' : 'Standard');
+    stmts.updateBusCrowd.run(level, pax, wait, eta, nextStop?.name || '', seatsAvail, id);
+    stmts.updateBusLocation.run(startStop.lat + rand(-0.02, 0.02), startStop.lng + rand(-0.02, 0.02), rand(10, 50), randInt(0, 359), id);
+    db.prepare('UPDATE buses SET route_name = ?, route_coords = ?, driver_name = ?, conductor_name = ?, ac_available = ?, women_reserved = ?, fuel_level = ? WHERE id = ?')
+      .run(routeName, JSON.stringify([{lat: startStop.lat, lng: startStop.lng}, {lat: endStop.lat, lng: endStop.lng}]), drivers[idx % drivers.length], `Conductor ${idx+1}`, idx % 4 === 0 || idx % 4 === 1 ? 1 : 0, 8, rand(40, 95), id);
   });
 
   // Users
@@ -522,6 +905,8 @@ function seedDatabase() {
     { type: 'safety', title: '🛡️ Women Safety Features Active', body: 'Live journey sharing, SOS alerts, and emergency contacts available.', user: userId },
     { type: 'reward', title: '⭐ Earn Rewards!', body: 'Earn 10 points per trip. Redeem for discounts on future travel.', user: userId },
     { type: 'route', title: '🔄 Smart Route Available', body: 'New AI-powered route recommendations: fastest, cheapest, least crowded, safest options.', user: userId },
+    { type: 'route', title: '🚌 40 Buses Active Now', body: 'Fleet expanded! More buses on 20 routes across Chennai.', user: userId },
+    { type: 'ai_prediction', title: '📊 Crowd Alert', body: 'Route 19B (Adyar-Tambaram) expecting high crowd during peak hours.', user: userId },
   ];
   notifs.forEach(n => { const nid = uuid(); stmts.createNotification.run(nid, n.user, n.type, n.title, n.body, '{}', '/'); });
 
