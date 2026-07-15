@@ -913,6 +913,14 @@ function seedDatabase() {
   console.log('✅ SmartBus NEO Seeded!');
 }
 
+// Chennai bounds to keep buses within city limits
+const CHENNAI_BOUNDS = {
+  south: 12.75,   // Near Chengalpattu
+  north: 13.22,   // Near Ponneri
+  west: 79.95,    // Near Porur
+  east: 80.35     // Near Perungudi
+};
+
 // ─── LIVE SIMULATION ───
 function simulateLiveUpdates() {
   try {
@@ -925,8 +933,11 @@ function simulateLiveUpdates() {
       const wait = Math.max(1, (bus.wait_time || 5) + randInt(-1, 2));
       const eta = Math.max(1, (bus.eta_minutes || 5) + randInt(-1, 2));
       const seatsAvail = Math.max(0, CAPACITY - newPax);
-      const latDelta = rand(-0.006, 0.006), lngDelta = rand(-0.006, 0.006);
-      const newLat = (bus.current_lat || 13.08) + latDelta, newLng = (bus.current_lng || 80.27) + lngDelta;
+      
+      // Keep buses within Chennai bounds - smaller movement
+      const latDelta = rand(-0.001, 0.001), lngDelta = rand(-0.001, 0.001);
+      const newLat = clamp((bus.current_lat || 13.08) + latDelta, CHENNAI_BOUNDS.south, CHENNAI_BOUNDS.north);
+      const newLng = clamp((bus.current_lng || 80.27) + lngDelta, CHENNAI_BOUNDS.west, CHENNAI_BOUNDS.east);
 
       stmts.updateBusCrowd.run(status, Math.round(newPax), wait, eta, bus.next_stop || '', seatsAvail, bus.id);
       stmts.updateBusLocation.run(newLat, newLng, rand(5, 50), randInt(0, 359), bus.id);
